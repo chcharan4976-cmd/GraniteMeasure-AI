@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "GraniteMeasure AI",
+    "slug": "granitemeasure-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B1116"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B1116"
+      },
+      "package": "com.granitemeasure.ai"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow GraniteMeasure AI to access your camera to scan blocks."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow GraniteMeasure AI to access your location."
+        }
+      ]
+    ],
+    "scheme": "granitemeasure"
+  }
+}

@@ -1,0 +1,30 @@
+export const darkPalette = {
+  background: '#0B1116',
+  surface: '#151F26',
+  elevated: '#1B2931',
+  primary: '#16B58A',
+  accent: '#3E91A8',
+  text: '#F4F8F7',
+  textSecondary: '#A5B5BC',
+  border: '#293943',
+  success: '#22c55e',
+  warning: '#f59e0b',
+  error: '#ef4444',
+  info: '#3b82f6',
+};
+
+export const lightPalette = {
+  background: '#F6F8F6',
+  surface: '#FFFFFF',
+  secondary: '#EDF3F1',
+  elevated: '#FFFFFF',
+  primary: '#16B58A',
+  accent: '#3E91A8',
+  text: '#17272B',
+  textSecondary: '#64777C',
+  border: '#D9E4E1',
+  success: '#16a34a',
+  warning: '#d97706',
+  error: '#dc2626',
+  info: '#2563eb',
+};
