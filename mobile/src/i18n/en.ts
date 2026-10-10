@@ -29,5 +29,6 @@ export const en = {
   empty: "No data available",
   measured: "Measured",
   estimated: "Estimated",
-  partial: "Partial"
+  partial: "Partial",
+  geometry: "Reconstructed geometry",
 };

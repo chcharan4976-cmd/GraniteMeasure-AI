@@ -61,7 +61,10 @@ export default function ResultsScreen() {
   }
 
   // Fallback if measurement failed or in progress
-  const hasValidMeasurement = measurement && measurement.length_cm !== null;
+  const hasValidMeasurement =
+    measurement &&
+    measurement.length_cm !== null &&
+    measurement.calibration_status === 'CALIBRATED';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -113,18 +116,21 @@ export default function ResultsScreen() {
               <Card style={{ backgroundColor: colors.surface, borderColor: colors.primary, borderWidth: 1 }}>
                 <View style={styles.volumeRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[typography.caption, { color: colors.textSecondary }]}>Bounding Box Volume</Text>
+                    <Text style={[typography.caption, { color: colors.textSecondary }]}>Bounding-box volume</Text>
                     <Text style={[typography.heroMeasurement, typography.mono, { color: colors.primary }]}>
                       {measurement.volume_m3?.toFixed(3)} <Text style={{ fontSize: 18 }}>m³</Text>
                     </Text>
+                    <Text style={[typography.caption, { color: colors.textSecondary, fontSize: 10 }]}>
+                      Not irregular stone volume
+                    </Text>
                   </View>
                   <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                    <Text style={[typography.caption, { color: colors.textSecondary }]}>Estimated Net Mass</Text>
+                    <Text style={[typography.caption, { color: colors.textSecondary }]}>Density-estimated mass</Text>
                     <Text style={[typography.heroMeasurement, typography.mono, { color: colors.accent }]}>
-                      {measurement.weight_mt?.toFixed(2)} <Text style={{ fontSize: 18 }}>MT</Text>
+                      {(measurement.estimated_mass_mt ?? measurement.weight_mt)?.toFixed(2)} <Text style={{ fontSize: 18 }}>MT</Text>
                     </Text>
                     <Text style={[typography.caption, { color: colors.textSecondary, fontSize: 10 }]}>
-                      @ 2.75 MT/m³ density
+                      Assumed 2,750 kg/m³ on bbox volume
                     </Text>
                   </View>
                 </View>
@@ -146,9 +152,15 @@ export default function ResultsScreen() {
                 </View>
 
                 <View style={styles.metaRow}>
-                  <Text style={[typography.body, { color: colors.textSecondary }]}>Confidence Score:</Text>
+                  <Text style={[typography.body, { color: colors.textSecondary }]}>Evidence label:</Text>
                   <Text style={[typography.body, typography.mono, { color: colors.text }]}>
-                    {((measurement.confidence || 0) * 100).toFixed(0)}%
+                    {measurement.confidence_label || 'NONE'}
+                  </Text>
+                </View>
+                <View style={styles.metaRow}>
+                  <Text style={[typography.body, { color: colors.textSecondary }]}>Irregular volume:</Text>
+                  <Text style={[typography.body, typography.mono, { color: colors.text }]}>
+                    {measurement.irregular_volume_status || 'IRREGULAR_VOLUME_UNAVAILABLE'}
                   </Text>
                 </View>
 

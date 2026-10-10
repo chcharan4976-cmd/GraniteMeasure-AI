@@ -137,6 +137,32 @@ class MeasurementResult(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class GeometryArtifact(Base):
+    __tablename__ = "geometry_artifacts"
+    id = Column(Integer, primary_key=True, index=True)
+    block_id = Column(Integer, ForeignKey("granite_blocks.id"), nullable=False)
+    job_id = Column(Integer, ForeignKey("analysis_jobs.id"))
+    artifact_type = Column(String, default="POINT_CLOUD_JSON")
+    file_path = Column(String, nullable=False)
+    point_count = Column(Integer)
+    is_dense = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class PhysicalReference(Base):
+    __tablename__ = "physical_references"
+    id = Column(Integer, primary_key=True, index=True)
+    block_id = Column(Integer, ForeignKey("granite_blocks.id"), nullable=False)
+    tape_length_cm = Column(Float)
+    tape_breadth_cm = Column(Float)
+    tape_height_cm = Column(Float)
+    marker_size_cm_verified = Column(Float)
+    weight_mt = Column(Float)
+    recorded_by = Column(String)
+    notes = Column(Text)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class SeigniorageRateVersion(Base):
     __tablename__ = "seigniorage_rate_versions"
     id = Column(Integer, primary_key=True, index=True)

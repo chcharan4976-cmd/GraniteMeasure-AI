@@ -133,15 +133,21 @@ export default function ReportScreen() {
                   </Text>
                 </View>
                 <View style={styles.tableRow}>
-                  <Text style={[typography.body, { color: colors.textSecondary }]}>Solid Bounding Volume</Text>
+                  <Text style={[typography.body, { color: colors.textSecondary }]}>Bounding-box volume</Text>
                   <Text style={[typography.body, typography.mono, { color: colors.primary, fontWeight: 'bold' }]}>
-                    {report.measurement.volume_m3?.toFixed(3)} m³
+                    {report.measurement.volume_m3 != null ? `${report.measurement.volume_m3.toFixed(3)} m³` : '—'}
                   </Text>
                 </View>
                 <View style={styles.tableRow}>
-                  <Text style={[typography.body, { color: colors.textSecondary }]}>Calculated Tonnage</Text>
+                  <Text style={[typography.body, { color: colors.textSecondary }]}>Irregular volume</Text>
+                  <Text style={[typography.body, typography.mono, { color: colors.text }]}>
+                    {report.measurement.irregular_volume_status || 'IRREGULAR_VOLUME_UNAVAILABLE'}
+                  </Text>
+                </View>
+                <View style={styles.tableRow}>
+                  <Text style={[typography.body, { color: colors.textSecondary }]}>Density-estimated mass</Text>
                   <Text style={[typography.body, typography.mono, { color: colors.accent, fontWeight: 'bold' }]}>
-                    {report.measurement.weight_mt?.toFixed(3)} MT
+                    {report.measurement.weight_mt != null ? `${report.measurement.weight_mt.toFixed(3)} MT` : '—'}
                   </Text>
                 </View>
                 <View style={styles.tableRow}>
@@ -151,9 +157,9 @@ export default function ReportScreen() {
                   </Text>
                 </View>
                 <View style={styles.tableRow}>
-                  <Text style={[typography.body, { color: colors.textSecondary }]}>Confidence Score</Text>
+                  <Text style={[typography.body, { color: colors.textSecondary }]}>Evidence label</Text>
                   <Text style={[typography.body, typography.mono, { color: colors.text }]}>
-                    {((report.measurement.confidence || 0) * 100).toFixed(0)}%
+                    {report.measurement.confidence_label || 'NONE'}
                   </Text>
                 </View>
               </>

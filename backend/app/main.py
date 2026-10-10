@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app.database import engine, Base
 import app.models  # Register all models
-from app.api import images, auth, quarries, blocks, capture, analysis, measurements, seigniorage, reports, audit
+from app.api import images, auth, quarries, blocks, capture, analysis, measurements, seigniorage, reports, audit, validation
 
 
 @asynccontextmanager
@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="GraniteMeasure AI",
     description="AI-Based Granite Block Measurement and Automated Seigniorage Assessment",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -44,6 +44,7 @@ app.include_router(measurements.router)
 app.include_router(seigniorage.router)
 app.include_router(reports.router)
 app.include_router(audit.router)
+app.include_router(validation.router)
 
 # Serve storage files
 STORAGE_DIR = Path(__file__).resolve().parent.parent / "storage"
@@ -55,7 +56,7 @@ def root():
     return {
         "application": "GraniteMeasure AI",
         "status": "running",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "message": "GraniteMeasure AI backend is operational",
         "docs": "/docs",
     }
@@ -63,10 +64,19 @@ def root():
 
 @app.get("/api/v1/health")
 def health_check():
+    from app.services.colmap_runner import colmap_status
+    from app.services import geometry as geom
+
+    colmap = colmap_status()
     return {
         "status": "healthy",
         "service": "granite-measurement-api",
-        "version": "0.1.0",
+        "version": "0.2.0",
+        "tools": {
+            "colmap": colmap,
+            "open3d": geom.o3d is not None,
+            "trimesh": geom.trimesh is not None,
+        },
     }
 
 

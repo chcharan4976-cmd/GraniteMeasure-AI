@@ -98,33 +98,44 @@ export default function BlockDetailScreen() {
                 <Text style={[typography.cardTitle, { color: colors.text }]}>Recovered Dimensions</Text>
                 <StatusBadge status={block.measurement.status} />
               </View>
-              <View style={[styles.dimensionRow, { marginTop: spacing.md }]}>
-                <View style={styles.dimBox}>
-                  <Text style={[typography.caption, { color: colors.textSecondary }]}>Length</Text>
-                  <Text style={[typography.sectionTitle, typography.mono, { color: colors.text }]}>
-                    {block.measurement.length_cm.toFixed(1)} cm
+              {block.measurement.length_cm != null ? (
+                <>
+                  <View style={[styles.dimensionRow, { marginTop: spacing.md }]}>
+                    <View style={styles.dimBox}>
+                      <Text style={[typography.caption, { color: colors.textSecondary }]}>Length</Text>
+                      <Text style={[typography.sectionTitle, typography.mono, { color: colors.text }]}>
+                        {block.measurement.length_cm.toFixed(1)} cm
+                      </Text>
+                    </View>
+                    <View style={styles.dimBox}>
+                      <Text style={[typography.caption, { color: colors.textSecondary }]}>Breadth</Text>
+                      <Text style={[typography.sectionTitle, typography.mono, { color: colors.text }]}>
+                        {block.measurement.breadth_cm != null ? `${block.measurement.breadth_cm.toFixed(1)} cm` : '—'}
+                      </Text>
+                    </View>
+                    <View style={styles.dimBox}>
+                      <Text style={[typography.caption, { color: colors.textSecondary }]}>Height</Text>
+                      <Text style={[typography.sectionTitle, typography.mono, { color: colors.text }]}>
+                        {block.measurement.height_cm != null ? `${block.measurement.height_cm.toFixed(1)} cm` : '—'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                  <View style={styles.rowBetween}>
+                    <Text style={[typography.body, { color: colors.textSecondary }]}>Bounding-box volume</Text>
+                    <Text style={[typography.cardTitle, typography.mono, { color: colors.primary }]}>
+                      {block.measurement.volume_m3 != null ? `${block.measurement.volume_m3.toFixed(3)} m³` : '—'}
+                    </Text>
+                  </View>
+                  <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
+                    Bounding-box volume is not irregular granite volume.
                   </Text>
-                </View>
-                <View style={styles.dimBox}>
-                  <Text style={[typography.caption, { color: colors.textSecondary }]}>Breadth</Text>
-                  <Text style={[typography.sectionTitle, typography.mono, { color: colors.text }]}>
-                    {block.measurement.breadth_cm.toFixed(1)} cm
-                  </Text>
-                </View>
-                <View style={styles.dimBox}>
-                  <Text style={[typography.caption, { color: colors.textSecondary }]}>Height</Text>
-                  <Text style={[typography.sectionTitle, typography.mono, { color: colors.text }]}>
-                    {block.measurement.height_cm.toFixed(1)} cm
-                  </Text>
-                </View>
-              </View>
-              <View style={[styles.divider, { backgroundColor: colors.border }]} />
-              <View style={styles.rowBetween}>
-                <Text style={[typography.body, { color: colors.textSecondary }]}>Solid Volume</Text>
-                <Text style={[typography.cardTitle, typography.mono, { color: colors.primary }]}>
-                  {block.measurement.volume_m3.toFixed(3)} m³
+                </>
+              ) : (
+                <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.md }]}>
+                  Centimetre dimensions withheld ({block.measurement.calibration_status || 'NOT_CALIBRATED'}).
                 </Text>
-              </View>
+              )}
             </Card>
           </View>
         )}

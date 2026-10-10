@@ -30,7 +30,10 @@ async def generate_report(block_id: int, db: AsyncSession = Depends(get_db)):
 
     # Get measurement
     meas_result = await db.execute(
-        select(MeasurementResult).where(MeasurementResult.block_id == block_id)
+        select(MeasurementResult)
+        .where(MeasurementResult.block_id == block_id)
+        .order_by(MeasurementResult.created_at.desc())
+        .limit(1)
     )
     measurement = meas_result.scalar_one_or_none()
 
@@ -106,13 +109,28 @@ async def generate_report(block_id: int, db: AsyncSession = Depends(get_db)):
             except (json.JSONDecodeError, TypeError):
                 warnings = [measurement.warnings]
 
+        details = {}
+        if measurement.details:
+            try:
+                details = json.loads(measurement.details)
+            except (json.JSONDecodeError, TypeError):
+                details = {}
         report["measurement"] = {
             "length_cm": measurement.length_cm,
             "breadth_cm": measurement.breadth_cm,
             "height_cm": measurement.height_cm,
             "volume_m3": measurement.volume_m3,
+            "volume_kind": "BOUNDING_BOX",
+            "bbox_volume_m3": details.get("bbox_volume_m3", measurement.volume_m3),
+            "irregular_volume_m3": details.get("irregular_volume_m3"),
+            "irregular_volume_status": details.get(
+                "irregular_volume_status", "IRREGULAR_VOLUME_UNAVAILABLE"
+            ),
             "weight_mt": measurement.weight_mt,
+            "estimated_mass_mt": details.get("estimated_mass_mt", measurement.weight_mt),
+            "mass_source": details.get("mass_source"),
             "confidence": measurement.confidence,
+            "confidence_label": details.get("confidence_label"),
             "status": measurement.status,
             "calibration_status": measurement.calibration_status,
             "measurement_type": measurement.measurement_type,

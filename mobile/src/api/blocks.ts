@@ -2,12 +2,12 @@ import { apiClient } from './client';
 
 export interface MeasurementSummary {
   id: number;
-  length_cm: number;
-  breadth_cm: number;
-  height_cm: number;
-  volume_m3: number;
-  weight_mt: number;
-  confidence: number;
+  length_cm: number | null;
+  breadth_cm: number | null;
+  height_cm: number | null;
+  volume_m3: number | null;
+  weight_mt: number | null;
+  confidence: number | null;
   status: 'MEASURED' | 'ESTIMATED' | 'PARTIAL' | 'UNVERIFIED' | 'FAILED';
   calibration_status: string;
 }

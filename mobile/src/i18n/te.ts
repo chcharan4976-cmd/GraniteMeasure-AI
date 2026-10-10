@@ -29,5 +29,6 @@ export const te = {
   empty: "డేటా అందుబాటులో లేదు",
   measured: "కొలవబడినది",
   estimated: "అంచనా వేయబడినది",
-  partial: "పాక్షికం"
+  partial: "పాక్షికం",
+  geometry: "పునర్నిర్మిత జ్యామితి",
 };

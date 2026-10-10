@@ -1,13 +1,16 @@
 # GraniteMeasure AI — Implementation Status
 
-Last Updated: 2026-10-10
+Last Updated: 2026-10-10 (Phase 2 verification; **not** a field-complete milestone)
 
 ## Status Legend
-- ✅ IMPLEMENTED AND TESTED
-- 🔧 IMPLEMENTED BUT UNVERIFIED
+
+- ✅ IMPLEMENTED AND TESTED (in this verification session or pytest)
+- 🔧 IMPLEMENTED BUT UNVERIFIED (code present; not proven on real granite / host tools missing)
 - 🚧 PARTIALLY IMPLEMENTED
 - 🔴 BLOCKED
 - ⬜ NOT IMPLEMENTED
+
+**Phase 2 is not complete as a field measurement system.** Backend pytest: **25 passed, 5 failed**. Irregular solid volume has **never** been compared to a physical method on a real block.
 
 ---
 
@@ -15,11 +18,11 @@ Last Updated: 2026-10-10
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Environment audit | ✅ | Python 3.12.10, Node 24.21, OpenCV 5.0, SQLite verified |
-| Backend FastAPI startup | ✅ | Running with lifespan table initialization and wildcard CORS |
-| SQLite database & models | ✅ | 16 SQLAlchemy tables created and migrated |
-| Mobile project initialization | ✅ | Expo SDK 51 + React Native 0.74 TypeScript strict mode |
-| API connectivity | ✅ | Mobile API client configured with dynamic host detection |
+| Environment audit | ✅ | Windows 11, Python 3.12.10, Node (npm 11.19), OpenCV in venv, ~6 GB RAM, no discrete GPU |
+| Backend FastAPI startup | ✅ | uvicorn 127.0.0.1:8000; `/` version 0.2.0; lifespan `create_all` |
+| SQLite database & models | 🚧 | Live server created `geometry_artifacts` and `physical_references`; TestClient pytest still hit missing tables until that migration |
+| Mobile project initialization | 🔧 | Expo SDK 51 / RN 0.74.1; `tsc --noEmit` clean; expo-doctor 3 failures |
+| API connectivity | 🔧 | Client configured; Android/emulator live capture **not** re-run this session |
 
 ---
 
@@ -27,27 +30,32 @@ Last Updated: 2026-10-10
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Block registration API | ✅ | Tested via pytest & live HTTP POST |
-| Block registration UI | ✅ | Quarry lease picker, granite category chips, stage selection |
-| Camera capture UI | ✅ | Expo CameraView with corner framing guides & shutter |
-| GPS & timestamp recording | ✅ | Integrated into block model and field reporting |
-| Multi-image capture session | ✅ | Sequenced uploads with SHA-256 evidence integrity |
-| Image quality analysis API | ✅ | OpenCV Laplacian variance blur, brightness, contrast, ArUco detection |
-| Real-time quality feedback | ✅ | Real-time warnings (blurry, dark, overexposed, marker status) |
+| Block registration API | 🚧 | Live POST works; pytest unique-constraint failures on persistent DB (`TEST-BLK-001`, `CGQ-001`) |
+| Block registration UI | 🔧 | Present; not visually re-verified on device this session |
+| Camera capture UI | 🔧 | Present; not re-verified on device this session |
+| GPS & timestamp recording | 🔧 | Model fields exist |
+| Multi-image capture session | 🔧 | API present; no field photo set in repo |
+| Image quality analysis API | ✅ | OpenCV analyzer pytest passed (synthetic ArUco JPEG) |
+| Real-time quality feedback | 🔧 | Mobile code present; not device-verified this session |
 
 ---
 
-## Milestone 3 — Measurement
+## Milestone 3 — Measurement (Phase 2 core)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| ArUco marker detection | ✅ | DICT_4X4_50 detector with corner extraction & metric scale px/cm |
-| Metric scale calibration | ✅ | Converts pixel dimensions to centimeters via known marker edge |
-| Multi-view feature matching | ✅ | OpenCV ORB feature extraction & BFMatcher with ratio test |
-| Camera pose & Essential Matrix | ✅ | `cv2.findEssentialMat` + `cv2.recoverPose` |
-| 3D point triangulation | ✅ | `cv2.triangulatePoints` with positive depth filtering |
-| Bounding box dimensions | ✅ | Statistical IQR outlier rejection + principal extent computation |
-| Metrological confidence | ✅ | Honest confidence score based on calibration & inlier counts |
+| ArUco marker detection | ✅ | DICT_4X4_50; missing-marker and wrong-size 2D scale tests passed |
+| Metric scale calibration | 🚧 | Engine **withholds cm** without 3D scale (tests passed). Synthetic triangulated-marker scale test **failed** (`scale_to_cm ≈ 8e-11`) |
+| Multi-view feature matching | 🔧 | OpenCV ORB stereo fallback; no quarry photo pair in repo |
+| Camera pose & Essential Matrix | 🔧 | Code path exists; not field-verified |
+| 3D point triangulation | 🚧 | Used in pipeline; marker-pair triangulation produced a collapsed scale in pytest |
+| Bounding box dimensions | 🔧 | PCA OBB unit test passed on a synthetic grid; not a granite block |
+| Irregular solid volume | 🚧 | Correctly **unavailable** without dense watertight observed mesh; never measured on real stone |
+| COLMAP SfM | 🔴 | Binary and pycolmap **not installed** on this host |
+| Open3D | 🔴 | Not installed; numpy OBB fallback |
+| Metrological confidence | 🔧 | Labels are evidence summaries, not certified uncertainty |
+| Geometry viewer | 🚧 | Unavailable state verified via API (`available: false`); interactive viewer not device-verified |
+| Job stage reporting | ✅ | Live job without images FAILED with named reason; `progress_pct` documented as ordinal |
 
 ---
 
@@ -55,11 +63,11 @@ Last Updated: 2026-10-10
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Granite category model | ✅ | 5 challenge categories with alias resolution |
-| Gangsaw classification | ✅ | Strict 270 cm × 150 cm dual-threshold evaluation |
-| Rate engine | ✅ | Challenge-configured rates (₹720 to ₹1,830 per MT) |
-| Indicative seigniorage calculation | ✅ | Density-based mass conversion (2,750 kg/m³) + statutory rate |
-| Audit trail persistence | ✅ | Immutable audit logs recorded on every registration, analysis & report |
+| Granite category model | ✅ | 5 challenge categories |
+| Gangsaw classification | ✅ | Strict `>` 270 cm × 150 cm; 270×150 is Below; pytest passed |
+| Rate engine | ✅ | Challenge rates ₹720–₹1,830 / MT |
+| Indicative seigniorage | 🔧 | Density 2750 kg/m³ unless weighbridge mass supplied; not legal certification |
+| Audit trail persistence | 🔧 | Logs on registration/analysis; not independently audited |
 
 ---
 
@@ -67,17 +75,10 @@ Last Updated: 2026-10-10
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Mineral Intelligence design system | ✅ | Dark (#0B1116) and Light (#F6F8F6) palettes with 8pt spacing |
-| Command Center / Home screen | ✅ | Live dashboard counters, quick actions, and recent block list |
-| Block list screen | ✅ | Search by identifier/category, status chips, pull-to-refresh |
-| Block detail screen | ✅ | Full provenance, dimensions summary, and workflow navigation |
-| Measurement results screen | ✅ | Large hero dimensions, solid volume, tonnage, calibration status |
-| Seigniorage assessment screen | ✅ | Statutory rate card, threshold classification, indicative fee due |
-| Official auditable report screen | ✅ | 4-section government report with share capabilities & audit trail |
-| English language support | ✅ | Full terminology coverage |
-| Telugu (తెలుగు) language support | ✅ | Native Telugu translations for all core flows |
-| Dark / Light theme switching | ✅ | System, light, and dark modes supported via ThemeContext |
-| TypeScript strict typechecking | ✅ | 0 errors (`tsc --noEmit` verified) |
+| Design system / screens | 🔧 | Code present including geometry screen; **no Android/emulator visual pass this session** |
+| English / Telugu | 🔧 | Translation files updated |
+| TypeScript strict | ✅ | `tsc --noEmit` exit 0 |
+| Expo doctor | 🚧 | 14/17; missing icon/splash assets; missing `expo-constants` / `expo-linking`; version skew vs SDK 51 |
 
 ---
 
@@ -85,9 +86,10 @@ Last Updated: 2026-10-10
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| 3D viewer | 🚧 | Point cloud data available in measurement payload |
-| Defect surface analysis | 🚧 | OpenCV contrast/discontinuity checks ready |
-| Dressing & cutting planner | 🚧 | Dimensional bounding box extents calculated |
+| 3D viewer | 🚧 | SVG point/OBB viewer; refuses generic cube |
+| Defect surface analysis | 🚧 | Quality heuristics only |
+| Dressing & cutting planner | 🚧 | Bounding extents only |
+| Dense MVS | 🔴 | No GPU, no COLMAP dense |
 
 ---
 
@@ -95,33 +97,37 @@ Last Updated: 2026-10-10
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Backend unit & integration tests | ✅ | 10/10 tests passing via pytest |
-| Mobile TypeScript strict compilation | ✅ | 0 errors |
-| Web preview bundle | ✅ | react-native-web and react-dom installed |
-| Live API server | ✅ | Running on http://localhost:8000 |
+| Backend pytest | 🚧 | **25 passed / 5 failed** (see MEASUREMENT_VALIDATION.md) |
+| Isolated test database | ⬜ | Tests used persistent `granitemeasure.db` |
+| Mobile TypeScript | ✅ | 0 errors |
+| Expo doctor | 🚧 | 3 failed checks |
+| Live API server | ✅ | Verified this session, then used for smoke tests |
+| Field photogrammetry accuracy | ⬜ | **Not performed** |
+| Irregular volume vs physical method | ⬜ | **Not performed** |
 
 ---
 
 ## Backend API Endpoints Matrix
 
-| Endpoint | Method | Verified Status | Description |
-|----------|--------|-----------------|-------------|
-| `/` | GET | ✅ | Service info & documentation link |
-| `/api/v1/health` | GET | ✅ | System health status |
-| `/api/v1/dashboard` | GET | ✅ | Live counters & recent blocks |
-| `/api/v1/auth/login` | POST | ✅ | Role-based authentication |
-| `/api/v1/quarries/` | GET, POST | ✅ | Quarry lease management |
-| `/api/v1/blocks/` | GET, POST | ✅ | Block registration & list |
-| `/api/v1/blocks/{id}` | GET | ✅ | Block detail with measurements |
-| `/api/v1/images/analyze` | POST | ✅ | OpenCV quality & ArUco detection |
-| `/api/v1/images/{id}/annotated` | GET | ✅ | Annotated visual JPEG overlay |
-| `/api/v1/capture/sessions` | POST | ✅ | Create multi-view capture session |
-| `/api/v1/capture/sessions/{id}/images` | POST | ✅ | Upload sequenced photo to session |
-| `/api/v1/capture/sessions/{id}/complete` | POST | ✅ | Finalize capture session |
-| `/api/v1/analysis/jobs` | POST | ✅ | Asynchronous measurement job |
-| `/api/v1/analysis/jobs/{id}` | GET | ✅ | Job status and progress tracking |
-| `/api/v1/measurements/{block_id}` | GET | ✅ | Recovered metric dimensions |
-| `/api/v1/seigniorage/rates` | GET | ✅ | All challenge rates & thresholds |
-| `/api/v1/seigniorage/calculate` | POST | ✅ | Calculate indicative assessment |
-| `/api/v1/reports/{block_id}` | GET | ✅ | Comprehensive auditable report |
-| `/api/v1/audit/` | GET | ✅ | Immutable audit trail |
+| Endpoint | Method | Verified this session | Notes |
+|----------|--------|----------------------|-------|
+| `/` | GET | ✅ | FastAPI 0.2.0 |
+| `/api/v1/health` | GET | ✅ | COLMAP/Open3D/trimesh reported honestly |
+| `/api/v1/dashboard` | GET | ✅ | pytest |
+| `/api/v1/auth/login` | POST | ✅ | pytest |
+| `/api/v1/quarries/` | GET, POST | 🚧 | Live listing implied; pytest POST unique-code fail |
+| `/api/v1/blocks/` | GET, POST | 🚧 | Live POST OK with unique id; pytest duplicate identifier fail |
+| `/api/v1/blocks/{id}` | GET | 🔧 | pytest duplicate blocked retrieval test |
+| `/api/v1/images/analyze` | POST | ✅ | pytest synthetic |
+| `/api/v1/capture/sessions*` | POST | 🔧 | Not HTTP-smoked this session |
+| `/api/v1/analysis/jobs` | POST | ✅ | Fails closed with no images |
+| `/api/v1/analysis/jobs/{id}` | GET | ✅ | FAILED + `error_message` |
+| `/api/v1/measurements/` | GET | ✅ | Empty list |
+| `/api/v1/measurements/{block_id}` | GET | ✅ | 404 when none |
+| `/api/v1/measurements/{id}/geometry` | GET | ✅ | `available: false` |
+| `/api/v1/seigniorage/rates` | GET | ✅ | pytest |
+| `/api/v1/seigniorage/calculate` | POST | 🔧 | Engine unit-tested |
+| `/api/v1/reports/{block_id}` | GET | ✅ | pytest |
+| `/api/v1/audit/` | GET | 🔧 | Not re-hit this session |
+| `/api/v1/validation/{id}/reference` | POST | ✅ | Live after uvicorn migrate |
+| `/api/v1/validation/{id}` | GET | ✅ | `field_dataset_available: false` |

@@ -35,10 +35,20 @@ export default function SeigniorageScreen() {
 
         setBlock(blockData);
 
-        const length = measData?.length_cm || 280.0;
-        const width = measData?.breadth_cm || 160.0;
-        const height = measData?.height_cm || 120.0;
+        const length = measData?.length_cm;
+        const width = measData?.breadth_cm;
+        const height = measData?.height_cm;
         const category = blockData?.color_group || 'Black Galaxy';
+        const calibrated =
+          measData?.calibration_status === 'CALIBRATED' &&
+          length != null &&
+          width != null &&
+          height != null;
+
+        if (!calibrated) {
+          setAssessment(null);
+          return;
+        }
 
         const calc = await calculateSeigniorage({
           color_group: category,
@@ -47,6 +57,7 @@ export default function SeigniorageScreen() {
           height_cm: height,
           density_kg_m3: 2750.0,
           block_id: blockId as string,
+          measurement_source: measData.status,
         });
 
         setAssessment(calc);
@@ -74,7 +85,9 @@ export default function SeigniorageScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Header title={t('seigniorage')} />
         <View style={styles.content}>
-          <Text style={[typography.body, { color: colors.textSecondary }]}>Unable to calculate assessment.</Text>
+          <Text style={[typography.body, { color: colors.textSecondary }]}>
+            Indicative seigniorage is withheld until a CALIBRATED measurement with centimetre dimensions exists. Placeholder dimensions are not used.
+          </Text>
         </View>
       </SafeAreaView>
     );

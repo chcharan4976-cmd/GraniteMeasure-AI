@@ -99,11 +99,12 @@ def test_seigniorage_rates_endpoint():
 def test_seigniorage_engine_classification():
     engine = SeigniorageEngine()
 
-    # Above Gangsaw: >= 270 cm AND >= 150 cm
+    # Above Gangsaw (challenge text): > 270 cm AND > 150 cm
     res_above = engine.calculate_assessment("Black Galaxy", 280.0, 160.0, 120.0)
     assert res_above["is_above_gangsaw"] is True
     assert res_above["classification"] == "Above Gangsaw"
     assert res_above["rate_per_mt"] == 1830.0
+    assert res_above["mass_kind"] == "DENSITY_ESTIMATE"
     # Volume: 2.8 * 1.6 * 1.2 = 5.376 m³
     # Mass: 5.376 * 2.75 = 14.784 MT
     # Amount: 14.784 * 1830 = 27054.72
@@ -116,13 +117,18 @@ def test_seigniorage_engine_classification():
     assert res_below["classification"] == "Below Gangsaw"
     assert res_below["rate_per_mt"] == 1530.0
 
-    # Boundary test: exactly 270 x 150 cm -> Above Gangsaw
+    # Boundary: exactly 270 x 150 cm is Below Gangsaw under strict greater-than
     res_boundary = engine.calculate_assessment("Black Galaxy", 270.0, 150.0, 100.0)
-    assert res_boundary["is_above_gangsaw"] is True
+    assert res_boundary["is_above_gangsaw"] is False
+    assert res_boundary["classification"] == "Below Gangsaw"
 
-    # Mixed edge test: 280 x 149 cm -> Below Gangsaw
+    # Mixed edge: 280 x 149 cm -> Below Gangsaw
     res_mixed = engine.calculate_assessment("Black Galaxy", 280.0, 149.0, 100.0)
     assert res_mixed["is_above_gangsaw"] is False
+
+    # 280 x 150.0: width is not strictly greater than 150 -> Below
+    res_eq_width = engine.calculate_assessment("Black Galaxy", 280.0, 150.0, 100.0)
+    assert res_eq_width["is_above_gangsaw"] is False
 
 
 def test_opencv_image_analyzer():

@@ -97,9 +97,11 @@ async def get_block(block_id: int, db: AsyncSession = Depends(get_db)):
     if not block:
         raise HTTPException(status_code=404, detail="Block not found")
 
-    # Get measurement if exists
     meas_result = await db.execute(
-        select(MeasurementResult).where(MeasurementResult.block_id == block_id)
+        select(MeasurementResult)
+        .where(MeasurementResult.block_id == block_id)
+        .order_by(MeasurementResult.created_at.desc())
+        .limit(1)
     )
     measurement = meas_result.scalar_one_or_none()
 
@@ -146,7 +148,10 @@ async def get_block_summary(block_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Block not found")
 
     meas_result = await db.execute(
-        select(MeasurementResult).where(MeasurementResult.block_id == block_id)
+        select(MeasurementResult)
+        .where(MeasurementResult.block_id == block_id)
+        .order_by(MeasurementResult.created_at.desc())
+        .limit(1)
     )
     measurement = meas_result.scalar_one_or_none()
 

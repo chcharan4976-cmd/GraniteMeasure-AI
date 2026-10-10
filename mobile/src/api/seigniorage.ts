@@ -17,14 +17,22 @@ export interface SeigniorageResult {
   width_cm: number;
   height_cm: number;
   volume_m3: number;
+  volume_basis?: string;
   weight_mt: number;
   weight_source: string;
+  mass_kind?: string;
   is_above_gangsaw: boolean;
   classification: string;
+  classification_rule?: {
+    mode?: string;
+    description?: string;
+    pending_departmental_confirmation?: boolean;
+  };
   rate_per_mt: number;
   indicative_seigniorage: number;
   rate_version: string;
   measurement_source: string;
+  indicative?: boolean;
   disclaimer: string;
 }
 

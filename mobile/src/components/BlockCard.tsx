@@ -29,9 +29,12 @@ export const BlockCard: React.FC<Props> = ({ block }) => {
         <Text style={[typography.body, { color: colors.accent, marginTop: spacing.xs }]}>
           {block.color_group}
         </Text>
-        {block.measurement && (
+        {block.measurement?.length_cm != null &&
+          block.measurement.breadth_cm != null &&
+          block.measurement.height_cm != null && (
           <Text style={[typography.body, typography.mono, { color: colors.text, marginTop: spacing.sm }]}>
-            {block.measurement.length_cm.toFixed(0)} × {block.measurement.breadth_cm.toFixed(0)} × {block.measurement.height_cm.toFixed(0)} cm • {block.measurement.volume_m3.toFixed(2)} m³
+            {block.measurement.length_cm.toFixed(0)} × {block.measurement.breadth_cm.toFixed(0)} × {block.measurement.height_cm.toFixed(0)} cm
+            {block.measurement.volume_m3 != null ? ` • bbox ${block.measurement.volume_m3.toFixed(2)} m³` : ''}
           </Text>
         )}
         <View style={styles.footer}>

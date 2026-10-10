@@ -11,4 +11,7 @@ dist/
 build/
 storage/uploads/
 storage/results/
+storage/workspaces/
+storage/geometry/
 *.db
+backend/tests/_tmp/

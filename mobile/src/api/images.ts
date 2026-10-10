@@ -37,17 +37,34 @@ export interface AnalysisJobStatus {
 export interface MeasurementData {
   id: number;
   block_id: number;
+  job_id?: number;
   length_cm: number | null;
   breadth_cm: number | null;
   height_cm: number | null;
   volume_m3: number | null;
+  bbox_volume_m3?: number | null;
+  irregular_volume_m3?: number | null;
+  irregular_volume_status?: string;
+  irregular_volume_reason?: string;
   weight_mt: number | null;
-  confidence: number;
+  estimated_mass_mt?: number | null;
+  mass_source?: string;
+  confidence: number | null;
+  confidence_label?: string;
+  confidence_basis?: string;
   status: 'MEASURED' | 'ESTIMATED' | 'PARTIAL' | 'UNVERIFIED' | 'FAILED';
   calibration_status: string;
   measurement_type: string;
   reconstructed_points?: number;
+  registered_cameras?: number;
   usable_images?: number;
+  total_images?: number;
+  scale_residual_cm?: number | null;
+  marker_size_cm?: number;
+  marker_size_source?: string;
+  coverage?: { unobserved_faces?: string[] };
+  is_dense?: boolean;
+  geometry_available?: boolean;
   warnings?: string[];
   created_at?: string;
 }
@@ -109,5 +126,36 @@ export const getBlockMeasurement = async (blockId: number | string): Promise<Mea
 
 export const getBlockReport = async (blockId: number | string) => {
   const response = await apiClient.get(`/reports/${blockId}`);
+  return response.data;
+};
+
+export const listAnalysisJobs = async (blockId: number | string) => {
+  const response = await apiClient.get(`/analysis/?block_id=${blockId}`);
+  return response.data as AnalysisJobStatus[];
+};
+
+export const getMeasurementGeometry = async (blockId: number | string) => {
+  const response = await apiClient.get(`/measurements/${blockId}/geometry`);
+  return response.data;
+};
+
+export const recordPhysicalReference = async (
+  blockId: number | string,
+  payload: {
+    tape_length_cm?: number;
+    tape_breadth_cm?: number;
+    tape_height_cm?: number;
+    marker_size_cm_verified?: number;
+    weight_mt?: number;
+    recorded_by?: string;
+    notes?: string;
+  }
+) => {
+  const response = await apiClient.post(`/validation/${blockId}/reference`, payload);
+  return response.data;
+};
+
+export const getPhysicalComparison = async (blockId: number | string) => {
+  const response = await apiClient.get(`/validation/${blockId}`);
   return response.data;
 };
