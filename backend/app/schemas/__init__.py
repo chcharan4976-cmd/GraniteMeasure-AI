@@ -50,13 +50,33 @@ class QuarryCreate(BaseModel):
     name: str
     code: Optional[str] = None
     lease_reference: Optional[str] = None
+    lease_number: Optional[str] = None
+    lease_holder: Optional[str] = None
+    location: Optional[str] = None
+    district: Optional[str] = "Prakasam"
+    mandal: Optional[str] = "Chimakurthy"
+    village: Optional[str] = None
+    granite_category: Optional[str] = "Black Galaxy"
+    gps_latitude: Optional[float] = None
+    gps_longitude: Optional[float] = None
+    operator_id: Optional[int] = None
+    status: Optional[str] = "ACTIVE"
+
+
+class QuarryUpdate(BaseModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+    lease_reference: Optional[str] = None
+    lease_number: Optional[str] = None
+    lease_holder: Optional[str] = None
+    location: Optional[str] = None
     district: Optional[str] = None
     mandal: Optional[str] = None
     village: Optional[str] = None
     granite_category: Optional[str] = None
     gps_latitude: Optional[float] = None
     gps_longitude: Optional[float] = None
-    operator_id: Optional[int] = None
+    is_active: Optional[bool] = None
 
 
 class QuarryResponse(BaseModel):
@@ -64,6 +84,9 @@ class QuarryResponse(BaseModel):
     name: str
     code: Optional[str] = None
     lease_reference: Optional[str] = None
+    lease_number: Optional[str] = None
+    lease_holder: Optional[str] = None
+    location: Optional[str] = None
     district: Optional[str] = None
     mandal: Optional[str] = None
     village: Optional[str] = None
@@ -71,6 +94,8 @@ class QuarryResponse(BaseModel):
     gps_latitude: Optional[float] = None
     gps_longitude: Optional[float] = None
     is_active: bool = True
+    active_blocks_count: Optional[int] = 0
+    status: Optional[str] = "ACTIVE"
     model_config = {"from_attributes": True}
 
 
@@ -89,14 +114,34 @@ class BlockResponse(BaseModel):
     id: int
     identifier: str
     color_group: str
-    quarry_id: int
+    quarry_id: Optional[int] = None
     block_type: str
     status: str
     gps_latitude: Optional[float] = None
     gps_longitude: Optional[float] = None
     observations: Optional[str] = None
+    is_archived: bool = False
+    archived_at: Optional[datetime] = None
+    is_deleted: bool = False
+    deleted_at: Optional[datetime] = None
     registered_at: Optional[datetime] = None
     model_config = {"from_attributes": True}
+
+
+class BlockArchiveRequest(BaseModel):
+    reason: Optional[str] = "Archived by mining officer"
+
+
+class BlockDeleteRequest(BaseModel):
+    confirm_identifier: Optional[str] = None
+    reason: Optional[str] = "Administrative block deletion"
+    force_hard_delete: bool = False
+
+
+class BulkBlockActionRequest(BaseModel):
+    block_ids: List[str]
+    reason: Optional[str] = "Bulk administrative action"
+    force_hard_delete: bool = False
 
 
 # ---- Capture ----
@@ -159,3 +204,62 @@ class DashboardStats(BaseModel):
     completed_measurements: int = 0
     needs_verification: int = 0
     recent_blocks: List[dict] = []
+
+
+# ---- Officer Schemas ----
+from app.schemas.officer import (
+    OfficerBase,
+    OfficerCreate,
+    OfficerUpdate,
+    OfficerResponse,
+    OfficerList,
+)
+
+# ---- Defect Schemas ----
+from app.schemas.defect import (
+    DefectTypeEnum,
+    DefectSeverityEnum,
+    DefectCreate,
+    DefectUpdate,
+    DefectConfirmRequest,
+    DefectResponse,
+    DefectList,
+)
+
+# ---- Cutting Schemas ----
+from app.schemas.cutting import (
+    CutTypeEnum,
+    CuttingPlanStatusEnum,
+    CuttingOperationCreate,
+    CuttingOperationResponse,
+    CuttingPlanCreate,
+    CuttingPlanUpdate,
+    CuttingPlanResponse,
+    CuttingPlanList,
+    DressingPlanGenerateRequest,
+)
+
+# ---- Dispatch & Verification Schemas ----
+from app.schemas.dispatch import (
+    ApprovalEventTypeEnum,
+    DispatchStatusEnum,
+    VerificationTypeEnum,
+    ApprovalEventCreate,
+    ApprovalEventResponse,
+    ApprovalEventList,
+    DispatchRecordCreate,
+    DispatchRecordUpdate,
+    DispatchRecordResponse,
+    DispatchRecordList,
+    ManualVerificationCreate,
+    ManualVerificationResponse,
+    ManualVerificationList,
+)
+
+# ---- Audit Schemas ----
+from app.schemas.audit import (
+    AuditLogCreate,
+    AuditLogResponse,
+    AuditLogList,
+)
+

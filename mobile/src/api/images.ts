@@ -69,11 +69,45 @@ export interface MeasurementData {
   created_at?: string;
 }
 
-export const analyzeSingleImage = async (uri: string): Promise<ImageAnalysisResponse> => {
-  const formData = new FormData();
-  const filename = uri.split('/').pop() || 'photo.jpg';
+export const resolveImageMimeAndName = (
+  uri: string,
+  fallbackName: string,
+  explicitName?: string,
+  explicitMime?: string
+) => {
+  let filename = explicitName || uri.split('/').pop() || fallbackName;
   const ext = filename.split('.').pop()?.toLowerCase();
-  const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+  let mimeType =
+    explicitMime ||
+    (ext === 'png'
+      ? 'image/png'
+      : ext === 'webp'
+      ? 'image/webp'
+      : ext === 'heic' || ext === 'heif'
+      ? 'image/heic'
+      : 'image/jpeg');
+
+  if (!filename.includes('.')) {
+    const extToAdd =
+      mimeType === 'image/png'
+        ? '.png'
+        : mimeType === 'image/webp'
+        ? '.webp'
+        : mimeType === 'image/heic' || mimeType === 'image/heif'
+        ? '.heic'
+        : '.jpg';
+    filename = `${filename}${extToAdd}`;
+  }
+  return { filename, mimeType };
+};
+
+export const analyzeSingleImage = async (
+  uri: string,
+  explicitName?: string,
+  explicitMime?: string
+): Promise<ImageAnalysisResponse> => {
+  const formData = new FormData();
+  const { filename, mimeType } = resolveImageMimeAndName(uri, 'photo.jpg', explicitName, explicitMime);
   formData.append('file', {
     uri,
     name: filename,
@@ -87,24 +121,110 @@ export const analyzeSingleImage = async (uri: string): Promise<ImageAnalysisResp
   return response.data;
 };
 
-export const createCaptureSession = async (blockId: number | string, officerName = 'Officer') => {
-  const response = await apiClient.post(`/capture/sessions?block_id=${blockId}&officer_name=${encodeURIComponent(officerName)}`);
-  return response.data;
-};
+export interface GraniteValidationResult {
+  verdict: 'ACCEPTED_GRANITE_BLOCK' | 'CLOSEUP_SURFACE' | 'UNCERTAIN_GRANITE' | 'REJECTED_UNRELATED' | 'REJECTED_POOR_QUALITY';
+  is_accepted: boolean;
+  is_closeup_defect?: boolean;
+  needs_review?: boolean;
+  confidence: number;
+  reasons: string[];
+  suggested_action: 'PROCEED' | 'HOLD_FOR_REVIEW' | 'RETAKE' | 'CHOOSE_ANOTHER';
+  message_en: string;
+  message_te: string;
+  metrics: {
+    blur_score?: number;
+    brightness?: number;
+    contrast?: number;
+    texture_energy?: number;
+    grain_roughness?: number;
+    line_count?: number;
+    has_aruco?: boolean;
+    face_detected?: boolean;
+    is_document?: boolean;
+    is_synthetic?: boolean;
+  };
+}
 
-export const uploadSessionImage = async (sessionId: number, uri: string, sequenceNumber = 0) => {
+export const validateGraniteImage = async (
+  uri: string,
+  explicitName?: string,
+  explicitMime?: string
+): Promise<GraniteValidationResult> => {
   const formData = new FormData();
-  const filename = uri.split('/').pop() || `img_${sequenceNumber}.jpg`;
-  const ext = filename.split('.').pop()?.toLowerCase();
-  const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+  const { filename, mimeType } = resolveImageMimeAndName(uri, 'photo.jpg', explicitName, explicitMime);
   formData.append('file', {
     uri,
     name: filename,
     type: mimeType,
   } as any);
 
+  const response = await apiClient.post<GraniteValidationResult>('/capture/validate-granite', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: UPLOAD_TIMEOUT_MS,
+  });
+  return response.data;
+};
+
+export const createCaptureSession = async (
+  blockId: number | string,
+  officerName = 'Officer',
+  stage: 'RAW' | 'POST_DRESSING' | string = 'RAW'
+) => {
   const response = await apiClient.post(
-    `/capture/sessions/${sessionId}/images?sequence_number=${sequenceNumber}`,
+    `/capture/sessions?block_id=${blockId}&officer_name=${encodeURIComponent(officerName)}&stage=${encodeURIComponent(stage)}`
+  );
+  return response.data;
+};
+
+export interface EvidenceMetadataPayload {
+  gpsLatitude?: number | null;
+  gpsLongitude?: number | null;
+  gpsAccuracyM?: number | null;
+  capturedAt?: string | null;
+  captureSource?: string;
+}
+
+export const uploadSessionImage = async (
+  sessionId: number,
+  uri: string,
+  sequenceNumber = 0,
+  forceAccept = false,
+  explicitName?: string,
+  explicitMime?: string,
+  metadata?: EvidenceMetadataPayload
+) => {
+  const formData = new FormData();
+  const { filename, mimeType } = resolveImageMimeAndName(
+    uri,
+    `img_${sequenceNumber}.jpg`,
+    explicitName,
+    explicitMime
+  );
+  formData.append('file', {
+    uri,
+    name: filename,
+    type: mimeType,
+  } as any);
+
+  if (metadata?.gpsLatitude != null) {
+    formData.append('gps_latitude', String(metadata.gpsLatitude));
+  }
+  if (metadata?.gpsLongitude != null) {
+    formData.append('gps_longitude', String(metadata.gpsLongitude));
+  }
+  if (metadata?.gpsAccuracyM != null) {
+    formData.append('gps_accuracy_m', String(metadata.gpsAccuracyM));
+  }
+  if (metadata?.capturedAt) {
+    formData.append('captured_at', metadata.capturedAt);
+  }
+  if (metadata?.captureSource) {
+    formData.append('capture_source', metadata.captureSource);
+  }
+
+  const url = `/capture/sessions/${sessionId}/images?sequence_number=${sequenceNumber}${forceAccept ? '&force_accept=true' : ''}`;
+  const response = await apiClient.post(
+    url,
     formData,
     {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -119,8 +239,8 @@ export const completeCaptureSession = async (sessionId: number) => {
   return response.data;
 };
 
-export const startAnalysisJob = async (blockId: number | string) => {
-  const response = await apiClient.post(`/analysis/jobs?block_id=${blockId}`);
+export const startAnalysisJob = async (blockId: number | string, stage: string = 'RAW') => {
+  const response = await apiClient.post(`/analysis/jobs?block_id=${blockId}&stage=${encodeURIComponent(stage)}`);
   return response.data;
 };
 

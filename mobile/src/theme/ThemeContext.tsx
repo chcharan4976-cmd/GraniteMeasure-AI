@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext } from 'react';
 import { useColorScheme } from 'react-native';
 import { darkPalette, lightPalette } from './colors';
+import { useSettingsStore } from '../store/useSettingsStore';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -15,10 +16,15 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const systemColorScheme = useColorScheme();
-  const [theme, setTheme] = useState<Theme>('system');
+  const theme = useSettingsStore((s) => s.theme) || 'light';
+  const setStoreTheme = useSettingsStore((s) => s.setTheme);
 
   const isDark = theme === 'system' ? systemColorScheme === 'dark' : theme === 'dark';
   const colors = isDark ? darkPalette : lightPalette;
+
+  const setTheme = (newTheme: Theme) => {
+    setStoreTheme(newTheme);
+  };
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme, colors, isDark }}>

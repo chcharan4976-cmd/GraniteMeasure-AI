@@ -49,63 +49,153 @@ class MeasurementEngine:
 
     def __init__(self, marker_size_cm: float = DEFAULT_MARKER_SIZE_CM):
         self.marker_size_cm = marker_size_cm
-        self.orb = cv2.ORB_create(nfeatures=2500)
+        # SIFT for granite texture — more inliers than ORB on stone surfaces.
+        # Run at 800px to keep pair matching under 3s per pair.
+        self._sift = cv2.SIFT_create(nfeatures=3000, contrastThreshold=0.04)
+        # ORB as fast fallback
+        self.orb = cv2.ORB_create(nfeatures=5000)
+        self.bf_sift = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
         self.bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(self.ARUCO_DICT)
         self.aruco_params = cv2.aruco.DetectorParameters()
         self.aruco_detector = cv2.aruco.ArucoDetector(self.aruco_dict, self.aruco_params)
 
     def load_image(self, path: str) -> Optional[np.ndarray]:
-        img = cv2.imread(path)
-        if img is None:
-            p = Path(path)
+        """Load an image from a stored relative path (e.g. 'uploads/abc123.jpg').
+
+        Resolves against STORAGE_ROOT first, then several fallback candidates so
+        the engine works regardless of the process working directory.
+        """
+        clean_path = str(path).strip()
+        # Build candidates ordered from most-likely to least-likely
+        from app.services.pipeline_config import STORAGE_ROOT
+        candidates = [
+            STORAGE_ROOT / clean_path,           # PRIMARY: storage/uploads/xxx.jpg
+            Path(clean_path),                    # absolute path stored directly
+            Path(__file__).resolve().parents[2] / "storage" / clean_path,
+            Path(__file__).resolve().parents[2] / clean_path,
+            Path.cwd() / "storage" / clean_path,
+            Path.cwd() / clean_path,
+            Path.cwd() / "backend" / "storage" / clean_path,
+        ]
+        data = None
+        for p in candidates:
             if p.is_file():
-                data = p.read_bytes()
-                arr = np.frombuffer(data, dtype=np.uint8)
-                img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-        return img
+                try:
+                    data = p.read_bytes()
+                    break
+                except Exception:
+                    continue
+
+        if data is None:
+            logger.warning("load_image: file not found for path '%s'", clean_path)
+            return None
+
+        # Try OpenCV first (handles standard JPEG/PNG)
+        try:
+            arr = np.frombuffer(data, dtype=np.uint8)
+            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if img is not None and img.size > 0:
+                return img
+        except Exception:
+            pass
+
+        # Fallback to Pillow (handles HEIC/HEIF, progressive JPEG, EXIF orientation)
+        try:
+            try:
+                import pillow_heif
+                pillow_heif.register_heif_opener()
+            except ImportError:
+                pass
+            from PIL import Image, ImageOps
+            import io as _io
+            with Image.open(_io.BytesIO(data)) as pil_im:
+                pil_im = ImageOps.exif_transpose(pil_im)
+                rgb = pil_im.convert("RGB")
+                return cv2.cvtColor(np.array(rgb), cv2.COLOR_RGB2BGR)
+        except Exception as exc:
+            logger.warning("load_image Pillow fallback failed for '%s': %s", clean_path, exc)
+        return None
 
     def resize_for_processing(self, image: np.ndarray, max_edge: int = MAX_IMAGE_EDGE) -> np.ndarray:
         h, w = image.shape[:2]
+        if h == 0 or w == 0:
+            return image
         scale = min(1.0, max_edge / float(max(h, w)))
         if scale >= 1.0:
             return image
-        return cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
+        try:
+            return cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        except cv2.error:
+            # Fallback: try INTER_LINEAR which is more robust
+            try:
+                return cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+            except Exception:
+                return image
 
     def detect_markers(self, image: np.ndarray) -> dict:
         return calib.detect_markers(image, self.marker_size_cm)
 
     def match_features(self, img1: np.ndarray, img2: np.ndarray) -> dict:
+        """Match features between two images using SIFT (preferred) or ORB fallback.
+
+        SIFT significantly outperforms ORB on granite stone surfaces because
+        stone texture is repetitive, low-contrast, and scale-variant. ORB's
+        binary descriptor is unreliable for photogrammetry of natural stone.
+        """
         gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
         gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
-        kp1, des1 = self.orb.detectAndCompute(gray1, None)
-        kp2, des2 = self.orb.detectAndCompute(gray2, None)
-        if des1 is None or des2 is None:
-            return {"matches": 0, "inliers": 0, "points1": [], "points2": []}
 
-        matches = self.bf.knnMatch(des1, des2, k=2)
-        good_matches = []
-        for m_pair in matches:
-            if len(m_pair) == 2:
-                m, n = m_pair
-                if m.distance < 0.75 * n.distance:
-                    good_matches.append(m)
+        # Apply CLAHE for low-contrast granite surfaces
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        gray1 = clahe.apply(gray1)
+        gray2 = clahe.apply(gray2)
 
-        if len(good_matches) < 8:
-            return {
-                "matches": len(good_matches),
-                "inliers": 0,
-                "points1": [],
-                "points2": [],
-            }
+        def _try_sift():
+            kp1, des1 = self._sift.detectAndCompute(gray1, None)
+            kp2, des2 = self._sift.detectAndCompute(gray2, None)
+            if des1 is None or des2 is None or len(kp1) < 8 or len(kp2) < 8:
+                return None
+            matches = self.bf_sift.knnMatch(des1, des2, k=2)
+            good = [m for m, n in matches if len([m, n]) == 2 and m.distance < 0.75 * n.distance]
+            if len(good) < 8:
+                return None
+            pts1 = np.float32([kp1[m.queryIdx].pt for m in good])
+            pts2 = np.float32([kp2[m.trainIdx].pt for m in good])
+            return kp1, kp2, pts1, pts2, good, "SIFT"
 
-        pts1 = np.float32([kp1[m.queryIdx].pt for m in good_matches])
-        pts2 = np.float32([kp2[m.trainIdx].pt for m in good_matches])
+        def _try_orb():
+            kp1, des1 = self.orb.detectAndCompute(gray1, None)
+            kp2, des2 = self.orb.detectAndCompute(gray2, None)
+            if des1 is None or des2 is None or len(kp1) < 8 or len(kp2) < 8:
+                return None
+            matches = self.bf.knnMatch(des1, des2, k=2)
+            good = [m for m, n in matches if len([m, n]) == 2 and m.distance < 0.75 * n.distance]
+            if len(good) < 8:
+                return None
+            pts1 = np.float32([kp1[m.queryIdx].pt for m in good])
+            pts2 = np.float32([kp2[m.trainIdx].pt for m in good])
+            return kp1, kp2, pts1, pts2, good, "ORB"
+
+        extraction = None
+        try:
+            extraction = _try_sift()
+        except cv2.error as e:
+            logger.warning("SIFT failed: %s, falling back to ORB", e)
+        if extraction is None:
+            extraction = _try_orb()
+
+        if extraction is None:
+            return {"matches": 0, "inliers": 0, "points1": [], "points2": [], "detector": "NONE"}
+
+        kp1, kp2, pts1, pts2, good_matches, detector = extraction
         F, mask = cv2.findFundamentalMat(pts1, pts2, cv2.FM_RANSAC, 3.0)
         if mask is None:
             inlier_count = 0
         else:
             inlier_count = int(mask.sum())
+
         return {
             "matches": len(good_matches),
             "inliers": inlier_count,
@@ -113,6 +203,7 @@ class MeasurementEngine:
             "points2": pts2.tolist(),
             "fundamental_matrix": F.tolist() if F is not None else None,
             "mask": mask.flatten().tolist() if mask is not None else None,
+            "detector": detector,
         }
 
     def estimate_camera_matrix(self, image: np.ndarray) -> np.ndarray:
@@ -165,16 +256,25 @@ class MeasurementEngine:
         loaded = []
         invalid = []
         for path in image_paths:
-            img = self.load_image(path)
-            if img is None:
-                invalid.append({"path": str(path), "reason": "UNREADABLE_IMAGE"})
-                continue
-            h, w = img.shape[:2]
-            if w < 64 or h < 64:
-                invalid.append({"path": str(path), "reason": "INVALID_IMAGE_TOO_SMALL"})
-                continue
-            processed = self.resize_for_processing(img)
-            loaded.append({"path": str(path), "original": img, "image": processed})
+            try:
+                img = self.load_image(path)
+                if img is None:
+                    invalid.append({"path": str(path), "reason": "UNREADABLE_IMAGE"})
+                    continue
+                h, w = img.shape[:2]
+                if w < 64 or h < 64:
+                    invalid.append({"path": str(path), "reason": "INVALID_IMAGE_TOO_SMALL"})
+                    continue
+                # Resize to 800px for fast feature matching within job timeout.
+                # SIFT at 800px on iPhone images: ~1.5s/image, tolerable for 10 images.
+                feature_img = self.resize_for_processing(img, max_edge=800)
+                if feature_img.size == 0:
+                    invalid.append({"path": str(path), "reason": "RESIZE_FAILED"})
+                    continue
+                loaded.append({"path": str(path), "original": img, "image": feature_img})
+            except Exception as exc:
+                logger.warning("Failed to load/resize image %s: %s", path, exc)
+                invalid.append({"path": str(path), "reason": f"LOAD_ERROR: {exc}"})
 
         if not loaded:
             return self._failure_result(
@@ -297,23 +397,44 @@ class MeasurementEngine:
         best = None
         match_results = []
         insufficient_overlap = True
+        # Progressive inlier thresholds: try strict first, relax on granite
+        INLIER_THRESHOLDS = [self.MIN_MATCHES, max(8, self.MIN_MATCHES // 3)]
 
         for i in range(len(loaded)):
-            for j in range(i + 1, min(len(loaded), i + 6)):
+            for j in range(i + 1, min(len(loaded), i + 8)):
                 match = self.match_features(loaded[i]["image"], loaded[j]["image"])
                 match_results.append(
-                    {"pair": f"{i}-{j}", "matches": match["matches"], "inliers": match["inliers"]}
+                    {
+                        "pair": f"{i}-{j}",
+                        "matches": match["matches"],
+                        "inliers": match["inliers"],
+                        "detector": match.get("detector", "UNKNOWN"),
+                    }
                 )
-                if match["inliers"] < self.MIN_MATCHES:
+                # Skip degenerate pairs (identical images have inliers == matches >= 100)
+                if match["inliers"] >= 100 and match["inliers"] == match["matches"]:
+                    logger.warning("Skipping degenerate pair %d-%d: inliers=%d == matches (identical images)", i, j, match["inliers"])
+                    continue
+                # Use progressively relaxed thresholds for granite
+                effective_min = INLIER_THRESHOLDS[0]
+                if match["inliers"] >= INLIER_THRESHOLDS[1] and best is None:
+                    effective_min = INLIER_THRESHOLDS[1]
+                if match["inliers"] < effective_min:
                     continue
                 insufficient_overlap = False
                 pts1 = np.array(match["points1"])
                 pts2 = np.array(match["points2"])
-                mask = np.array(match["mask"]).astype(bool)
-                pts1_in = pts1[mask]
-                pts2_in = pts2[mask]
+                if match.get("mask"):
+                    mask = np.array(match["mask"]).astype(bool)
+                    pts1_in = pts1[mask]
+                    pts2_in = pts2[mask]
+                else:
+                    pts1_in = pts1
+                    pts2_in = pts2
+                if len(pts1_in) < 8:
+                    continue
                 try:
-                    E, _ = cv2.findEssentialMat(pts1_in, pts2_in, K, method=cv2.RANSAC)
+                    E, e_mask = cv2.findEssentialMat(pts1_in, pts2_in, K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
                     if E is None:
                         continue
                     _, R, t, _ = cv2.recoverPose(E, pts1_in, pts2_in, K)
@@ -337,10 +458,18 @@ class MeasurementEngine:
                     logger.warning("Pose recovery failed for pair %s-%s: %s", i, j, exc)
 
         if best is None or len(best["points"]) < MIN_RECONSTRUCTED_POINTS:
+            # Provide a clear diagnostic about why feature matching failed
+            max_inliers = max((m["inliers"] for m in match_results), default=0)
             reason = (
-                "Insufficient photo overlap for reconstruction"
-                if insufficient_overlap
-                else "Failed camera reconstruction — too few triangulated points"
+                f"Insufficient photo overlap for reconstruction. "
+                f"Best pair produced only {max_inliers} geometric inliers "
+                f"(minimum needed: {INLIER_THRESHOLDS[1]}). "
+                f"Ensure photos are taken from multiple distinct angles around the "
+                f"stone block with ≥30% overlap between consecutive views."
+            ) if max_inliers > 0 else (
+                "No feature matches found between any image pair. "
+                "Images may be of different objects, or image quality is too low "
+                "for photogrammetric reconstruction."
             )
             return self._failure_result(
                 reason,
@@ -406,15 +535,36 @@ class MeasurementEngine:
 
         points = np.asarray(reconstruction["points"], dtype=np.float64)
         if scale_info is None:
+            # Determine the specific reason metric scale could not be applied
+            if not marker_views:
+                scale_reason = (
+                    "No ArUco calibration marker was detected in any photograph. "
+                    "To obtain metric dimensions, place a standard ArUco marker "
+                    "(DICT_4X4_50, printed at exactly 10 cm or 20 cm edge) beside "
+                    "the granite block and retake the photograph set. "
+                    "Relative 3D shape was reconstructed but centimetre values cannot "
+                    "be assigned without a known physical scale reference."
+                )
+            elif len(marker_views) == 1:
+                scale_reason = (
+                    "ArUco marker detected in only one photograph. "
+                    "Metric scale requires the same marker to be visible in at least "
+                    "two overlapping views so its 3D position can be triangulated. "
+                    "Ensure the marker appears in at least two photos from different angles."
+                )
+            else:
+                scale_reason = (
+                    "ArUco marker detected in multiple photos but could not be matched "
+                    "to the reconstructed stereo pair. The marker must appear in the "
+                    "specific pair of images used for 3D reconstruction."
+                )
             reconstruction["points_cm"] = None
             reconstruction["points_units"] = "relative"
             reconstruction["calibration_status"] = "NOT_CALIBRATED"
             reconstruction["scale_info"] = {
                 "applied": False,
-                "reason": (
-                    "No 3D marker scale could be recovered. A marker in one image "
-                    "does not metricise the reconstruction. Dimensions are relative only."
-                ),
+                "reason": scale_reason,
+                "marker_views_available": len(marker_views),
             }
             reconstruction["relative_points"] = points
             return reconstruction
@@ -502,7 +652,11 @@ class MeasurementEngine:
         )
         warnings.append(irregular["reason"])
         if not calibrated:
-            warnings.append("NOT_CALIBRATED — centimetre dimensions are withheld.")
+            scale_reason = reconstruction.get("scale_info", {}).get("reason", "")
+            warnings.append(
+                f"NOT_CALIBRATED — metric centimetre dimensions cannot be assigned. "
+                f"{scale_reason}"
+            )
         if usable_images < 5:
             warnings.append("Fewer than 5 images — surface coverage is likely incomplete.")
         if reconstruction.get("engine") == "OPENCV_STEREO":

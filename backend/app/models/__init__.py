@@ -22,6 +22,8 @@ class Quarry(Base):
     name = Column(String, index=True, nullable=False)
     code = Column(String, unique=True)
     lease_reference = Column(String)
+    lease_holder = Column(String)
+    location = Column(String)
     district = Column(String)
     mandal = Column(String)
     village = Column(String)
@@ -40,10 +42,15 @@ class GraniteBlock(Base):
     quarry_id = Column(Integer, ForeignKey("quarries.id"))
     color_group = Column(String, nullable=False)
     block_type = Column(String, default="RAW")  # RAW or PROCESSED
-    status = Column(String, default="REGISTERED")  # REGISTERED, CAPTURED, ANALYZING, MEASURED, VERIFIED, FAILED
+    status = Column(String, default="REGISTERED")  # REGISTERED, CAPTURING, CAPTURED, ANALYZING, MEASURED, VERIFIED, ASSESSED, APPROVED, DISPATCHED, ARCHIVED, FAILED
     gps_latitude = Column(Float)
     gps_longitude = Column(Float)
     observations = Column(Text)
+    is_archived = Column(Boolean, default=False, nullable=False)
+    archived_at = Column(DateTime, nullable=True)
+    is_deleted = Column(Boolean, default=False, nullable=False)
+    deleted_at = Column(DateTime, nullable=True)
+    deletion_reason = Column(String, nullable=True)
     registered_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
@@ -52,6 +59,7 @@ class CaptureSession(Base):
     id = Column(Integer, primary_key=True, index=True)
     block_id = Column(Integer, ForeignKey("granite_blocks.id"), nullable=False)
     officer_name = Column(String)
+    stage = Column(String, default="RAW")  # RAW, POST_DRESSING
     status = Column(String, default="IN_PROGRESS")  # IN_PROGRESS, COMPLETED, CANCELLED
     image_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -67,10 +75,20 @@ class BlockImage(Base):
     file_path = Column(String, nullable=False)
     original_filename = Column(String)
     sha256 = Column(String, nullable=False)
+    perceptual_hash = Column(String, nullable=True)
+    view_label = Column(String, default="UNSPECIFIED")  # FRONT, BACK, LEFT, RIGHT, TOP, BOTTOM, OBLIQUE, CALIBRATION, DEFECT_CLOSEUP
+    is_duplicate = Column(Boolean, default=False)
+    duplicate_of_id = Column(Integer, nullable=True)
     file_size = Column(Integer)
     image_width = Column(Integer)
     image_height = Column(Integer)
     sequence_number = Column(Integer)
+    gps_latitude = Column(Float, nullable=True)
+    gps_longitude = Column(Float, nullable=True)
+    gps_accuracy_m = Column(Float, nullable=True)
+    captured_at = Column(DateTime, nullable=True)
+    capture_source = Column(String, default="CAMERA")  # CAMERA, GALLERY
+    annotated_path = Column(String, nullable=True)
     uploaded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     session = relationship("CaptureSession", back_populates="images")
 
@@ -107,6 +125,7 @@ class AnalysisJob(Base):
     id = Column(Integer, primary_key=True, index=True)
     block_id = Column(Integer, ForeignKey("granite_blocks.id"), nullable=False)
     session_id = Column(Integer, ForeignKey("capture_sessions.id"))
+    stage = Column(String, default="RAW")  # RAW, POST_DRESSING
     status = Column(String, default="PENDING")  # PENDING, VALIDATING, FEATURE_MATCHING, RECONSTRUCTING, MEASURING, COMPLETED, FAILED
     current_step = Column(String, default="QUEUED")
     progress_pct = Column(Integer, default=0)
@@ -121,10 +140,14 @@ class MeasurementResult(Base):
     id = Column(Integer, primary_key=True, index=True)
     block_id = Column(Integer, ForeignKey("granite_blocks.id"), nullable=False)
     job_id = Column(Integer, ForeignKey("analysis_jobs.id"))
+    stage = Column(String, default="RAW")  # RAW, POST_DRESSING
     length_cm = Column(Float)
     breadth_cm = Column(Float)
     height_cm = Column(Float)
     volume_m3 = Column(Float)
+    bbox_volume_m3 = Column(Float, nullable=True)
+    irregular_volume_m3 = Column(Float, nullable=True)
+    uncertainty_margin_pct = Column(Float, nullable=True)
     weight_mt = Column(Float)
     confidence = Column(Float)
     status = Column(String, default="ESTIMATED")  # MEASURED, ESTIMATED, PARTIAL, UNVERIFIED, FAILED
@@ -246,3 +269,11 @@ class AuditLog(Base):
     entity_id = Column(Integer)
     details = Column(Text)
     timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+# Additional models
+from app.models.officer import Officer, DemoIdentity
+from app.models.defect import DefectResult
+from app.models.cutting import CuttingPlan, CuttingOperation
+from app.models.dispatch import ApprovalEvent
+

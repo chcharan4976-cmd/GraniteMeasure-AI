@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import GraniteBlock, PhysicalReference
+from app.api.blocks import _resolve_block_obj
 from app.api.measurements import _latest_measurement, _serialize
 from app.services.validation import compare_dimensions
 
@@ -26,15 +27,13 @@ class ReferenceIn(BaseModel):
 
 @router.post("/{block_id}/reference")
 async def record_reference(
-    block_id: int, payload: ReferenceIn, db: AsyncSession = Depends(get_db)
+    block_id: str, payload: ReferenceIn, db: AsyncSession = Depends(get_db)
 ):
-    block = (
-        await db.execute(select(GraniteBlock).where(GraniteBlock.id == block_id))
-    ).scalar_one_or_none()
+    block = await _resolve_block_obj(block_id, db)
     if not block:
         raise HTTPException(status_code=404, detail="Block not found")
     rec = PhysicalReference(
-        block_id=block_id,
+        block_id=block.id,
         tape_length_cm=payload.tape_length_cm,
         tape_breadth_cm=payload.tape_breadth_cm,
         tape_height_cm=payload.tape_height_cm,
@@ -47,20 +46,23 @@ async def record_reference(
     db.add(rec)
     await db.commit()
     await db.refresh(rec)
-    return {"id": rec.id, "block_id": block_id, "status": "recorded"}
+    return {"id": rec.id, "block_id": block.id, "status": "recorded"}
 
 
 @router.get("/{block_id}")
-async def get_comparison(block_id: int, db: AsyncSession = Depends(get_db)):
+async def get_comparison(block_id: str, db: AsyncSession = Depends(get_db)):
+    block = await _resolve_block_obj(block_id, db)
+    if not block:
+        raise HTTPException(status_code=404, detail="Block not found")
     ref = (
         await db.execute(
             select(PhysicalReference)
-            .where(PhysicalReference.block_id == block_id)
+            .where(PhysicalReference.block_id == block.id)
             .order_by(PhysicalReference.created_at.desc())
             .limit(1)
         )
     ).scalar_one_or_none()
-    measurement = await _latest_measurement(db, block_id)
+    measurement = await _latest_measurement(db, block.id)
     measured = _serialize(measurement) if measurement else {}
     reference = None
     if ref:
@@ -90,7 +92,8 @@ async def get_comparison(block_id: int, db: AsyncSession = Depends(get_db)):
             reference,
         )
     return {
-        "block_id": block_id,
+        "block_id": block.id,
+        "block_identifier": block.identifier,
         "measurement": measured or None,
         "reference": reference,
         "comparison": comparison,

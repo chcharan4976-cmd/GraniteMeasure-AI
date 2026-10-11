@@ -4,16 +4,38 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from app.database import engine, Base
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except Exception:
+    pass
+
+
+from app.database import engine, Base, DB_DIR
+from app.migrate_db import migrate_database
 import app.models  # Register all models
-from app.api import images, auth, quarries, blocks, capture, analysis, measurements, seigniorage, reports, audit, validation
+from app.api import (
+    images, auth, quarries, blocks, capture, analysis, measurements,
+    seigniorage, reports, audit, validation, segmentation, matching, damage
+)
+from app.api.routes import (
+    officers,
+    defects,
+    cutting,
+    dispatch,
+    verification,
+    audit as routes_audit,
+    dashboard as routes_dashboard,
+    assistant,
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Create database tables on startup."""
+    """Create database tables on startup and apply dynamic migrations."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    migrate_database(DB_DIR / "granitemeasure.db")
     yield
 
 
@@ -45,10 +67,24 @@ app.include_router(seigniorage.router)
 app.include_router(reports.router)
 app.include_router(audit.router)
 app.include_router(validation.router)
+app.include_router(segmentation.router)
+app.include_router(matching.router)
+app.include_router(damage.router)
+
+# Register new extension routers
+app.include_router(officers.router, prefix="/api/v1")
+app.include_router(defects.router, prefix="/api/v1")
+app.include_router(cutting.router, prefix="/api/v1")
+app.include_router(dispatch.router, prefix="/api/v1")
+app.include_router(verification.router, prefix="/api/v1")
+app.include_router(routes_audit.router, prefix="/api/v1")
+app.include_router(routes_dashboard.router, prefix="/api/v1")
+app.include_router(assistant.router, prefix="/api/v1")
 
 # Serve storage files
 STORAGE_DIR = Path(__file__).resolve().parent.parent / "storage"
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/storage", StaticFiles(directory=str(STORAGE_DIR)), name="storage")
 
 
 @app.get("/")
@@ -89,7 +125,12 @@ async def dashboard_stats():
 
     async with SessionLocal() as db:
         # Total blocks
-        total_result = await db.execute(select(func.count(GraniteBlock.id)))
+        total_result = await db.execute(
+            select(func.count(GraniteBlock.id)).where(
+                GraniteBlock.is_deleted == False,
+                GraniteBlock.is_archived == False,
+            )
+        )
         total_blocks = total_result.scalar() or 0
 
         # Pending analysis
@@ -111,14 +152,22 @@ async def dashboard_stats():
         # Needs verification
         verify_result = await db.execute(
             select(func.count(GraniteBlock.id)).where(
-                GraniteBlock.status == "MEASURED"
+                GraniteBlock.status == "MEASURED",
+                GraniteBlock.is_deleted == False,
+                GraniteBlock.is_archived == False,
             )
         )
         needs_verification = verify_result.scalar() or 0
 
         # Recent blocks
         recent_result = await db.execute(
-            select(GraniteBlock).order_by(GraniteBlock.registered_at.desc()).limit(10)
+            select(GraniteBlock)
+            .where(
+                GraniteBlock.is_deleted == False,
+                GraniteBlock.is_archived == False,
+            )
+            .order_by(GraniteBlock.registered_at.desc())
+            .limit(10)
         )
         recent = recent_result.scalars().all()
 

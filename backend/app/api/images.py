@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 from uuid import uuid4
 import hashlib
 
@@ -25,14 +25,18 @@ MAX_FILE_SIZE = 15 * 1024 * 1024
 async def analyze_granite_image(
     file: UploadFile = File(...)
 ):
-    if file.content_type not in [
+    allowed_types = [
         "image/jpeg",
         "image/png",
-        "image/webp"
-    ]:
+        "image/webp",
+        "image/heic",
+        "image/heif",
+        "application/octet-stream",
+    ]
+    if file.content_type and file.content_type not in allowed_types:
         raise HTTPException(
             status_code=415,
-            detail="Only JPEG, PNG and WebP are supported"
+            detail="Only JPEG, PNG, WebP, and HEIC/HEIF are supported"
         )
 
     content = await file.read(MAX_FILE_SIZE + 1)

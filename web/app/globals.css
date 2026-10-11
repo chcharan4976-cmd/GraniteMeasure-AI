@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #fafaf9;
+  --bg-secondary: #f5f5f4;
+  --bg-card: #ffffff;
+  --text-primary: #1c1917;
+  --text-secondary: #78716c;
+  --accent: #059669;
+  --accent-light: #10b981;
+  --border-color: #e7e5e4;
+}
+
+.dark {
+  --bg-primary: #0c0f15;
+  --bg-secondary: #151a24;
+  --bg-card: #1e2532;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --accent: #10b981;
+  --accent-light: #34d399;
+  --border-color: #2b3444;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  transition: background-color 0.2s ease, color 0.2s ease;
+  min-height: 100vh;
+}
+
+/* Custom Webkit Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.45);
+}
+
+/* Telugu Typography fine-tuning */
+[lang='te'] {
+  line-height: 1.65;
+}

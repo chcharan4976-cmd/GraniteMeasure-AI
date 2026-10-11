@@ -1,31 +1,44 @@
 import { StyleSheet } from 'react-native';
 
-export const typography = StyleSheet.create({
+export const fonts = {
+  regular: 'Manrope-Regular',
+  medium: 'Manrope-Medium',
+  semiBold: 'Manrope-SemiBold',
+  bold: 'Manrope-Bold',
+  mono: 'IBMPlexMono-Regular',
+};
+
+const styles = StyleSheet.create({
   heroMeasurement: {
-    fontFamily: 'Manrope-Bold',
+    fontFamily: fonts.bold,
     fontSize: 34,
   },
   pageTitle: {
-    fontFamily: 'Manrope-Bold',
+    fontFamily: fonts.bold,
     fontSize: 26,
   },
   sectionTitle: {
-    fontFamily: 'Manrope-SemiBold',
+    fontFamily: fonts.semiBold,
     fontSize: 19,
   },
   cardTitle: {
-    fontFamily: 'Manrope-SemiBold',
+    fontFamily: fonts.semiBold,
     fontSize: 16,
   },
   body: {
-    fontFamily: 'Manrope-Regular',
+    fontFamily: fonts.regular,
     fontSize: 15,
   },
   caption: {
-    fontFamily: 'Manrope-Regular',
+    fontFamily: fonts.regular,
     fontSize: 13,
   },
   mono: {
-    fontFamily: 'IBMPlexMono-Regular',
+    fontFamily: fonts.mono,
   },
 });
+
+export const typography = {
+  ...styles,
+  fonts,
+};

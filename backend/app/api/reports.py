@@ -9,16 +9,16 @@ from app.models import (
     GraniteBlock, MeasurementResult, SeigniorageAssessment,
     BlockImage, CaptureSession, Quarry, AuditLog
 )
+from app.api.blocks import _resolve_block_obj
 
 router = APIRouter(prefix="/api/v1/reports", tags=["Reports"])
 
 
 @router.get("/{block_id}")
-async def generate_report(block_id: int, db: AsyncSession = Depends(get_db)):
+async def generate_report(block_id: str, db: AsyncSession = Depends(get_db)):
     """Generate a comprehensive report for a granite block."""
     # Get block
-    result = await db.execute(select(GraniteBlock).where(GraniteBlock.id == block_id))
-    block = result.scalar_one_or_none()
+    block = await _resolve_block_obj(block_id, db)
     if not block:
         raise HTTPException(status_code=404, detail="Block not found")
 
@@ -31,7 +31,7 @@ async def generate_report(block_id: int, db: AsyncSession = Depends(get_db)):
     # Get measurement
     meas_result = await db.execute(
         select(MeasurementResult)
-        .where(MeasurementResult.block_id == block_id)
+        .where(MeasurementResult.block_id == block.id)
         .order_by(MeasurementResult.created_at.desc())
         .limit(1)
     )
@@ -39,7 +39,7 @@ async def generate_report(block_id: int, db: AsyncSession = Depends(get_db)):
 
     # Get seigniorage assessment
     assess_result = await db.execute(
-        select(SeigniorageAssessment).where(SeigniorageAssessment.block_id == block_id)
+        select(SeigniorageAssessment).where(SeigniorageAssessment.block_id == block.id)
     )
     assessment = assess_result.scalar_one_or_none()
 
@@ -189,3 +189,19 @@ async def list_reports(db: AsyncSession = Depends(get_db)):
         {"block_id": b.id, "identifier": b.identifier, "status": b.status}
         for b in blocks
     ]
+
+
+@router.get("/{block_id}/html")
+async def get_report_html(block_id: str, db: AsyncSession = Depends(get_db)):
+    """Generate printable HTML government assessment certificate."""
+    from fastapi.responses import HTMLResponse
+    from app.services.report_generator import ReportGenerator
+
+    block = await _resolve_block_obj(block_id, db)
+    if not block:
+        raise HTTPException(status_code=404, detail="Block not found")
+    data = await ReportGenerator.compile_block_report(block.id, db)
+    if "error" in data:
+        raise HTTPException(status_code=404, detail=data["error"])
+    html_content = ReportGenerator.generate_html_report(data)
+    return HTMLResponse(content=html_content)

@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
 
 from app.database import get_db
 from app.models import AuditLog
+from app.api.blocks import _resolve_block_obj
 
 router = APIRouter(prefix="/api/v1/audit", tags=["Audit"])
 
@@ -42,11 +43,15 @@ async def get_audit_logs(
 
 
 @router.get("/block/{block_id}")
-async def get_block_audit(block_id: int, db: AsyncSession = Depends(get_db)):
+async def get_block_audit(block_id: str, db: AsyncSession = Depends(get_db)):
     """Get audit trail for a specific block."""
+    block = await _resolve_block_obj(block_id, db)
+    if not block:
+        raise HTTPException(status_code=404, detail=f"Block '{block_id}' not found")
+
     result = await db.execute(
         select(AuditLog)
-        .where(AuditLog.entity_id == block_id)
+        .where(AuditLog.entity_id == block.id)
         .order_by(AuditLog.timestamp)
     )
     logs = result.scalars().all()

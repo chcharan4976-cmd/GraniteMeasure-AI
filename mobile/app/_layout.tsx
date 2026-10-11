@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { ThemeProvider } from '../src/theme/ThemeContext';
+import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   useFonts,
@@ -15,6 +15,30 @@ import { StatusBar } from 'expo-status-bar';
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient();
+
+function RootNavigation() {
+  const { isDark } = useTheme();
+  return (
+    <>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="welcome" />
+        <Stack.Screen name="auth" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="block/new" />
+        <Stack.Screen name="block/[id]" />
+        <Stack.Screen name="capture/[blockId]" />
+        <Stack.Screen name="damage/[blockId]" />
+        <Stack.Screen name="geometry/[blockId]" />
+        <Stack.Screen name="results/[blockId]" />
+        <Stack.Screen name="seigniorage/[blockId]" />
+        <Stack.Screen name="report/[blockId]" />
+        <Stack.Screen name="quarry/new" />
+      </Stack>
+    </>
+  );
+}
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -33,19 +57,7 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <StatusBar style="auto" />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="welcome" />
-          <Stack.Screen name="auth" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="block/new" />
-          <Stack.Screen name="block/[id]" />
-          <Stack.Screen name="capture/[blockId]" />
-          <Stack.Screen name="results/[blockId]" />
-          <Stack.Screen name="seigniorage/[blockId]" />
-          <Stack.Screen name="report/[blockId]" />
-        </Stack>
+        <RootNavigation />
       </ThemeProvider>
     </QueryClientProvider>
   );

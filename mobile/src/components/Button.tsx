@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, StyleProp, ViewStyle } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { typography } from '../theme/typography';
 import { spacing } from '../theme/spacing';
@@ -10,9 +10,10 @@ interface ButtonProps {
   variant?: 'primary' | 'secondary' | 'outline';
   loading?: boolean;
   disabled?: boolean;
+  style?: StyleProp<ViewStyle>;
 }
 
-export const Button: React.FC<ButtonProps> = ({ onPress, title, variant = 'primary', loading, disabled }) => {
+export const Button: React.FC<ButtonProps> = ({ onPress, title, variant = 'primary', loading, disabled, style }) => {
   const { colors } = useTheme();
 
   const getVariantStyles = () => {
@@ -37,6 +38,7 @@ export const Button: React.FC<ButtonProps> = ({ onPress, title, variant = 'prima
       style={[
         styles.container,
         getVariantStyles(),
+        style,
         disabled && { opacity: 0.5 }
       ]}
       onPress={onPress}

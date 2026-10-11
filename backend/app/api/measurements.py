@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import GeometryArtifact, GraniteBlock, MeasurementResult
+from app.api.blocks import _resolve_block_obj
 
 router = APIRouter(prefix="/api/v1/measurements", tags=["Measurements"])
 
@@ -75,31 +76,32 @@ async def _latest_measurement(db: AsyncSession, block_id: int):
 
 
 @router.get("/{block_id}")
-async def get_measurement(block_id: int, db: AsyncSession = Depends(get_db)):
-    measurement = await _latest_measurement(db, block_id)
+async def get_measurement(block_id: str, db: AsyncSession = Depends(get_db)):
+    block = await _resolve_block_obj(block_id, db)
+    if not block:
+        raise HTTPException(status_code=404, detail=f"Granite block '{block_id}' not found")
+    measurement = await _latest_measurement(db, block.id)
     if not measurement:
         raise HTTPException(status_code=404, detail="No measurement found for this block")
     return _serialize(measurement)
 
 
 @router.get("/{block_id}/geometry")
-async def get_geometry(block_id: int, db: AsyncSession = Depends(get_db)):
-    block = (
-        await db.execute(select(GraniteBlock).where(GraniteBlock.id == block_id))
-    ).scalar_one_or_none()
+async def get_geometry(block_id: str, db: AsyncSession = Depends(get_db)):
+    block = await _resolve_block_obj(block_id, db)
     if not block:
-        raise HTTPException(status_code=404, detail="Block not found")
+        raise HTTPException(status_code=404, detail=f"Granite block '{block_id}' not found")
 
     art = (
         await db.execute(
             select(GeometryArtifact)
-            .where(GeometryArtifact.block_id == block_id)
+            .where(GeometryArtifact.block_id == block.id)
             .order_by(GeometryArtifact.created_at.desc())
             .limit(1)
         )
     ).scalar_one_or_none()
     if not art:
-        measurement = await _latest_measurement(db, block_id)
+        measurement = await _latest_measurement(db, block.id)
         details = _parse_json(measurement.details, {}) if measurement else {}
         path = details.get("geometry_artifact")
         if not path:

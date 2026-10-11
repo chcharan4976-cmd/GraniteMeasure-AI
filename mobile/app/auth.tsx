@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../src/theme/ThemeContext';
@@ -9,29 +9,31 @@ import { Button } from '../src/components/Button';
 import { useTranslation } from '../src/i18n/useTranslation';
 import { useAuthStore } from '../src/store/useAuthStore';
 import { login } from '../src/api/auth';
-import { ShieldCheck, User } from 'lucide-react-native';
+import { ShieldCheck, User, Globe } from 'lucide-react-native';
 
 const DEV_ROLES = [
-  { role: 'Officer', username: 'officer', name: 'Mining Officer Rao' },
-  { role: 'Quarry Operator', username: 'operator', name: 'Quarry Operator Reddy' },
-  { role: 'Supervisor', username: 'supervisor', name: 'Field Supervisor Naidu' },
-  { role: 'Admin', username: 'admin', name: 'System Administrator' },
+  { role: 'Officer', username: 'officer', defaultName: 'Mining Officer (Field Unit)' },
+  { role: 'Quarry Operator', username: 'operator', defaultName: 'Quarry Operator (Chimakkurthy)' },
+  { role: 'Supervisor', username: 'supervisor', defaultName: 'Field Inspection Supervisor' },
+  { role: 'Admin', username: 'admin', defaultName: 'Department Administrator' },
 ];
 
 export default function AuthScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { t } = useTranslation();
+  const { t, language, setLanguage } = useTranslation();
   const setAuthUser = useAuthStore((state) => state.login);
 
+  const [selectedRole, setSelectedRole] = useState('Officer');
+  const [officerName, setOfficerName] = useState('Mining Officer (Field Unit)');
   const [username, setUsername] = useState('officer');
   const [password, setPassword] = useState('officer123');
-  const [selectedRole, setSelectedRole] = useState('Officer');
   const [loading, setLoading] = useState(false);
 
   const handleSelectRole = (r: typeof DEV_ROLES[0]) => {
     setSelectedRole(r.role);
     setUsername(r.username);
+    setOfficerName(r.defaultName);
     setPassword(`${r.username}123`);
   };
 
@@ -46,25 +48,21 @@ export default function AuthScreen() {
 
       setAuthUser({
         id: authRes.user_id,
-        name: authRes.full_name || authRes.username,
+        name: officerName.trim() || authRes.full_name || authRes.username,
         username: authRes.username,
         role: authRes.role,
         token: authRes.access_token,
       });
 
       router.replace('/(tabs)/home');
-    } catch (e: any) {
-      Alert.alert(
-        'Authentication Error',
-        e.response?.data?.detail || 'Unable to authenticate. Using local offline session.'
-      );
-      // Fallback local dev login
+    } catch {
+      // Local fallback for offline/demo operation
       setAuthUser({
         id: 2,
-        name: 'Mining Officer Rao',
-        username: 'officer',
-        role: 'Officer',
-        token: 'dev-token-officer',
+        name: officerName.trim() || 'Field Officer',
+        username,
+        role: selectedRole,
+        token: `dev-token-${selectedRole.toLowerCase()}`,
       });
       router.replace('/(tabs)/home');
     } finally {
@@ -74,86 +72,115 @@ export default function AuthScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.content}>
-        <View style={styles.brandHeader}>
-          <ShieldCheck color={colors.primary} size={40} />
-          <Text style={[typography.heroMeasurement, { color: colors.text, marginTop: spacing.sm }]}>
-            GraniteMeasure AI
-          </Text>
-          <Text style={[typography.body, { color: colors.accent, textAlign: 'center' }]}>
-            Andhra Pradesh Mining & Geology Department
-          </Text>
-        </View>
-
-        <Text style={[typography.cardTitle, { color: colors.text, marginTop: spacing.xl, marginBottom: spacing.xs }]}>
-          Select Role (Local Dev Demo)
-        </Text>
-        <View style={styles.roleGrid}>
-          {DEV_ROLES.map((r) => (
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.content}>
+          {/* Language Switcher in Header */}
+          <View style={styles.topLangRow}>
             <TouchableOpacity
-              key={r.role}
-              style={[
-                styles.roleChip,
-                {
-                  backgroundColor: selectedRole === r.role ? colors.primary : colors.surface,
-                  borderColor: selectedRole === r.role ? colors.primary : colors.border,
-                },
-              ]}
-              onPress={() => handleSelectRole(r)}
+              style={[styles.langBtn, { borderColor: colors.border }]}
+              onPress={() => setLanguage(language === 'en' ? 'te' : 'en')}
             >
-              <Text
-                style={[
-                  typography.caption,
-                  { color: selectedRole === r.role ? '#FFF' : colors.text, fontWeight: 'bold' },
-                ]}
-              >
-                {r.role}
+              <Globe color={colors.primary} size={16} />
+              <Text style={[typography.caption, { color: colors.text, marginLeft: 6 }]}>
+                {language === 'en' ? 'తెలుగు' : 'English'}
               </Text>
             </TouchableOpacity>
-          ))}
-        </View>
+          </View>
 
-        <View style={{ marginTop: spacing.md }}>
-          <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: 4 }]}>
-            Username
+          <View style={styles.brandHeader}>
+            <ShieldCheck color={colors.primary} size={48} />
+            <Text style={[typography.heroMeasurement, { color: colors.text, marginTop: spacing.sm }]}>
+              {t('appName')}
+            </Text>
+            <Text style={[typography.body, { color: colors.accent, textAlign: 'center', marginTop: 4 }]}>
+              {t('departmentName')}
+            </Text>
+          </View>
+
+          <Text style={[typography.cardTitle, { color: colors.text, marginTop: spacing.lg, marginBottom: spacing.xs }]}>
+            {t('selectRole')}
           </Text>
-          <TextInput
-            style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]}
-            placeholder="Username"
-            placeholderTextColor={colors.textSecondary}
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-          />
+          <View style={styles.roleGrid}>
+            {DEV_ROLES.map((r) => (
+              <TouchableOpacity
+                key={r.role}
+                style={[
+                  styles.roleChip,
+                  {
+                    backgroundColor: selectedRole === r.role ? colors.primary : colors.surface,
+                    borderColor: selectedRole === r.role ? colors.primary : colors.border,
+                  },
+                ]}
+                onPress={() => handleSelectRole(r)}
+              >
+                <Text
+                  style={[
+                    typography.caption,
+                    { color: selectedRole === r.role ? '#FFF' : colors.text, fontWeight: 'bold' },
+                  ]}
+                >
+                  {r.role}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-          <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: 4 }]}>
-            Password
-          </Text>
-          <TextInput
-            style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]}
-            placeholder="Password"
-            placeholderTextColor={colors.textSecondary}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-        </View>
+          <View style={{ marginTop: spacing.md }}>
+            <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: 4 }]}>
+              {t('officerIdentity')} (Editable Demo Name)
+            </Text>
+            <TextInput
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]}
+              placeholder="Officer / Inspector Name"
+              placeholderTextColor={colors.textSecondary}
+              value={officerName}
+              onChangeText={setOfficerName}
+            />
 
-        <View style={{ marginTop: spacing.lg }}>
-          <Button
-            title={loading ? 'Authenticating...' : t('login')}
-            onPress={handleLogin}
-            disabled={loading}
-          />
+            <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: 4 }]}>
+              Username
+            </Text>
+            <TextInput
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]}
+              placeholder="Username"
+              placeholderTextColor={colors.textSecondary}
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+            />
+
+            <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: 4 }]}>
+              Password
+            </Text>
+            <TextInput
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]}
+              placeholder="Password"
+              placeholderTextColor={colors.textSecondary}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+          </View>
+
+          <View style={{ marginTop: spacing.lg }}>
+            <Button
+              title={loading ? t('loading') : t('login')}
+              onPress={handleLogin}
+              disabled={loading}
+            />
+          </View>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { flex: 1, padding: spacing.xl, justifyContent: 'center' },
+  scroll: { flexGrow: 1, justifyContent: 'center' },
+  content: { padding: spacing.xl },
+  topLangRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.md },
+  langBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 16, borderWidth: 1 },
   brandHeader: { alignItems: 'center', marginBottom: spacing.md },
   roleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
   roleChip: {
