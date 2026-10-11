@@ -32,8 +32,8 @@ export interface CreateBlockParams {
   color_group: string;
   identifier?: string;
   block_type?: string;
-  gps_latitude?: number;
-  gps_longitude?: number;
+  gps_latitude?: number | null;
+  gps_longitude?: number | null;
   observations?: string;
 }
 

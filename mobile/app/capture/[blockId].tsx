@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -15,15 +16,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { typography } from '../../src/theme/typography';
 import { spacing } from '../../src/theme/spacing';
+import { useAuthStore } from '../../src/store/useAuthStore';
 import {
   createCaptureSession,
   uploadSessionImage,
   completeCaptureSession,
   startAnalysisJob,
-  analyzeSingleImage,
   QualityAnalysisResult,
 } from '../../src/api/images';
-import { Camera as CameraIcon, Check, AlertCircle, ArrowLeft, Flashlight, RefreshCw, UploadCloud } from 'lucide-react-native';
+import { Check, AlertCircle, ArrowLeft, Flashlight } from 'lucide-react-native';
 
 interface CapturedPhotoItem {
   uri: string;
@@ -36,27 +37,35 @@ export default function CaptureScreen() {
   const { blockId } = useLocalSearchParams();
   const router = useRouter();
   const { colors } = useTheme();
+  const user = useAuthStore((s) => s.user);
 
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
 
   const [photos, setPhotos] = useState<CapturedPhotoItem[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
+  const [sessionError, setSessionError] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [currentWarning, setCurrentWarning] = useState<string | null>(null);
 
+  const officerName = user?.name || 'Mining Officer';
+
   // Initialize capture session on mount
   useEffect(() => {
-    (async () => {
-      try {
-        const session = await createCaptureSession(blockId as string, 'Mining Officer');
-        setSessionId(session.session_id);
-      } catch (err) {
-        console.warn('Could not initialize session on backend:', err);
-      }
-    })();
+    initSession();
   }, [blockId]);
+
+  const initSession = async () => {
+    setSessionError(false);
+    try {
+      const session = await createCaptureSession(blockId as string, officerName);
+      setSessionId(session.session_id);
+    } catch (err) {
+      console.warn('Could not initialize session on backend:', err);
+      setSessionError(true);
+    }
+  };
 
   if (!permission) {
     return (
@@ -82,12 +91,46 @@ export default function CaptureScreen() {
         >
           <Text style={[typography.cardTitle, { color: '#FFF' }]}>Grant Permission</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={{ marginTop: spacing.md }}
+          onPress={() => Linking.openSettings()}
+        >
+          <Text style={[typography.body, { color: colors.primary }]}>Open App Settings</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  // Show a recoverable error if session creation failed
+  if (sessionError) {
+    return (
+      <SafeAreaView style={[styles.center, { backgroundColor: colors.background, padding: spacing.xl }]}>
+        <AlertCircle color={colors.warning} size={48} />
+        <Text style={[typography.sectionTitle, { color: colors.text, marginTop: spacing.md, textAlign: 'center' }]}>
+          Backend Unreachable
+        </Text>
+        <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm }]}>
+          Could not create a capture session. Check that the GraniteMeasure backend is running and the device can reach it.
+        </Text>
+        <TouchableOpacity
+          style={[styles.grantBtn, { backgroundColor: colors.primary, marginTop: spacing.xl }]}
+          onPress={initSession}
+        >
+          <Text style={[typography.cardTitle, { color: '#FFF' }]}>Retry Connection</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={{ marginTop: spacing.md }} onPress={() => router.back()}>
+          <Text style={[typography.body, { color: colors.textSecondary }]}>Go Back</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
   const handleCapturePhoto = async () => {
     if (!cameraRef.current) return;
+    if (!sessionId) {
+      Alert.alert('No Session', 'Capture session is not ready. Please wait or tap Retry Connection.');
+      return;
+    }
     try {
       setIsProcessing(true);
       const photo = await cameraRef.current.takePictureAsync({
@@ -106,41 +149,62 @@ export default function CaptureScreen() {
 
       setPhotos((prev) => [...prev, newPhotoItem]);
 
-      // Analyze image quality & ArUco markers in real time
-      try {
-        const analysisRes = await analyzeSingleImage(photo.uri);
-        const quality = analysisRes.analysis;
-
-        // If capture session exists, upload image to session
-        if (sessionId) {
-          await uploadSessionImage(sessionId, photo.uri, newIndex);
+      // Upload image directly to session (backend runs quality + ArUco analysis on its end)
+      // This eliminates the duplicate /images/analyze → /capture/sessions/{id}/images round-trip.
+      // Retry is only attempted on network-level failures (no HTTP response), NOT on server errors,
+      // to avoid duplicate BlockImage records if the server received the first request.
+      let uploadSuccess = false;
+      let quality: QualityAnalysisResult | undefined;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const uploadRes = await uploadSessionImage(sessionId, photo.uri, newIndex);
+          // uploadRes.quality is the shape from capture.py — map to QualityAnalysisResult
+          if (uploadRes.quality) {
+            quality = {
+              image_width: 0,
+              image_height: 0,
+              brightness: uploadRes.quality.brightness ?? 0,
+              contrast: uploadRes.quality.contrast ?? 0,
+              blur_score: uploadRes.quality.blur_score ?? 0,
+              quality_status: uploadRes.quality.status === 'PASS' ? 'PASS' : 'REVIEW_REQUIRED',
+              warnings: uploadRes.quality.warnings ?? [],
+              detected_markers: uploadRes.quality.markers ?? [],
+              marker_count: uploadRes.quality.marker_count ?? 0,
+              metric_calibration_status: 'UNKNOWN',
+            };
+          }
+          uploadSuccess = true;
+          break;
+        } catch (uploadErr: any) {
+          const hasHttpResponse = !!uploadErr?.response;
+          if (hasHttpResponse || attempt === 2) {
+            // Server received it (HTTP error) — don't retry to avoid duplicates.
+            // Also stop after the second network-level attempt.
+            console.warn(`Upload attempt ${attempt} failed:`, uploadErr?.message ?? uploadErr);
+            break;
+          }
+          // Network-level failure on attempt 1 (timeout, connection refused) — safe to retry once
         }
+      }
 
-        setPhotos((prev) =>
-          prev.map((item, idx) =>
-            idx === newIndex
-              ? { ...item, quality, analyzing: false, uploaded: true }
-              : item
-          )
-        );
+      setPhotos((prev) =>
+        prev.map((item, idx) =>
+          idx === newIndex
+            ? { ...item, quality, analyzing: false, uploaded: uploadSuccess }
+            : item
+        )
+      );
 
-        if (quality.warnings && quality.warnings.length > 0) {
-          setCurrentWarning(quality.warnings[0]);
-        } else {
-          setCurrentWarning(null);
-        }
-      } catch (err) {
-        console.warn('Real-time quality analysis error:', err);
-        setPhotos((prev) =>
-          prev.map((item, idx) =>
-            idx === newIndex
-              ? { ...item, analyzing: false, uploaded: false }
-              : item
-          )
-        );
+      if (!uploadSuccess) {
+        setCurrentWarning('Image upload failed — photo saved locally but not sent to backend.');
+      } else if (quality?.warnings && quality.warnings.length > 0) {
+        setCurrentWarning(quality.warnings[0]);
+      } else {
+        setCurrentWarning(null);
       }
     } catch (err) {
       console.warn('Capture error:', err);
+      Alert.alert('Capture Failed', 'Could not take photo. Please try again.');
     } finally {
       setIsProcessing(false);
     }
@@ -152,6 +216,29 @@ export default function CaptureScreen() {
       return;
     }
 
+    const failedCount = photos.filter((p) => !p.uploaded).length;
+    if (failedCount > 0 && failedCount === photos.length) {
+      Alert.alert(
+        'No Images Uploaded',
+        'None of the captured photos were successfully uploaded to the backend. Check your network connection and try again.',
+      );
+      return;
+    }
+    if (failedCount > 0) {
+      Alert.alert(
+        `${failedCount} Photo${failedCount > 1 ? 's' : ''} Not Uploaded`,
+        'Some photos could not be sent to the backend. The analysis will proceed with the uploaded images only. Continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Continue', onPress: () => _submitJob() },
+        ],
+      );
+      return;
+    }
+    await _submitJob();
+  };
+
+  const _submitJob = async () => {
     try {
       setIsProcessing(true);
       if (sessionId) {
@@ -160,7 +247,7 @@ export default function CaptureScreen() {
       // Start analysis job on backend
       await startAnalysisJob(blockId as string);
 
-      // Navigate to results screen (or analysis progress)
+      // Navigate to results screen — polling happens there
       router.replace(`/results/${blockId}`);
     } catch (err: any) {
       Alert.alert('Processing Failed', err.response?.data?.detail || err.message || 'Could not start measurement job');
@@ -179,7 +266,7 @@ export default function CaptureScreen() {
         <View style={styles.titleContainer}>
           <Text style={[typography.cardTitle, { color: '#FFF' }]}>Block Multi-View Capture</Text>
           <Text style={[typography.caption, { color: '#AAA' }]}>
-            {photos.length} Captured • Session #{sessionId || 'Active'}
+            {photos.filter((p) => p.uploaded).length}/{photos.length} Uploaded • Session #{sessionId || '—'}
           </Text>
         </View>
         <TouchableOpacity

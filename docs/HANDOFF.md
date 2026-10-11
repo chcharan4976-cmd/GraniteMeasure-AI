@@ -4,49 +4,51 @@
 
 GraniteMeasure AI is an Android-first FastAPI + Expo app for the Andhra Pradesh RTGS AI Hackathon granite workflow: capture → quality/ArUco → photogrammetry → indicative seigniorage → report.
 
-**Phase 2 verification on 2026-10-10 did not complete the measurement problem.**
+**Phase 3 (GitHub Copilot):** Backend pytest 34 passed, TypeScript clean, Expo Doctor 17/17, database isolation fixed, marker-scale validation fixed, assessment persistence implemented.
 
-- Backend pytest: **25 passed, 5 failed** (not 10/10).
-- FastAPI **does start** (v0.2.0) and measurement/geometry APIs **fail closed** when there is no reconstruction.
+**Phase 4 (Kiro):** Mobile → backend integration audit. Critical integration gaps fixed by code inspection. No device execution performed. TypeScript must be re-verified manually.
+
+Core measurement constraint unchanged:
 - **COLMAP is not installed.** Open3D is not installed. Fallback is OpenCV stereo.
 - **No real irregular granite volume** has been validated with tape, displacement, or weighbridge data.
-- Mobile `tsc --noEmit` is clean; `expo-doctor` reports **3 failed checks**.
 - Do not ship centimetres, solid m³, or seigniorage rupees as certified field results.
 
-Details: `docs/MEASUREMENT_VALIDATION.md`, `docs/IMPLEMENTATION_STATUS.md`.
+Details: `docs/PHASE4_VERIFICATION.md`, `docs/MEASUREMENT_VALIDATION.md`, `docs/IMPLEMENTATION_STATUS.md`.
 
 ---
 
-## 1. Layout (Phase 2 additions)
+## 1. Layout (Phase 4 additions)
 
 ```
 GraniteMeasure-AI/
 ├── backend/
-│   ├── app/main.py                 # FastAPI 0.2.0, health reports tool availability
-│   ├── app/api/validation.py       # Tape/weighbridge reference vs measurement
-│   ├── app/services/
-│   │   ├── measurement.py          # OpenCV stereo + optional COLMAP; withhold unscaled cm
-│   │   ├── calibration.py          # ArUco + triangulated marker scale
-│   │   ├── geometry.py             # OBB, coverage, watertight / irregular volume gate
-│   │   ├── colmap_runner.py        # Honest COLMAP discovery; no fake success
-│   │   ├── pipeline_config.py      # Marker size, timeouts, gangsaw mode
-│   │   ├── validation.py           # Error vs tape (not field proof)
-│   │   └── seigniorage.py          # strict_gt 270×150, density vs weighbridge
-│   └── tests/
-│       ├── test_all.py
-│       └── test_measurement_pipeline.py
+│   ├── app/main.py
+│   ├── app/api/...
+│   └── app/services/...
 ├── mobile/
-│   ├── app/geometry/[blockId].tsx
-│   └── src/components/GeometryViewer.tsx   # Unavailable ≠ generic cube
+│   ├── .env                          # NEW Phase 4 — emulator default URL (gitignored)
+│   ├── .env.example                  # NEW Phase 4 — physical device setup guide (tracked)
+│   ├── app.json                      # UPDATED Phase 4 — usesCleartextTraffic: true
+│   ├── app/
+│   │   ├── block/new.tsx             # UPDATED Phase 4 — real GPS via expo-location
+│   │   ├── block/[id].tsx            # UPDATED Phase 4 — 404 vs network error distinction
+│   │   ├── capture/[blockId].tsx     # UPDATED Phase 4 — session error, single upload, retry
+│   │   ├── results/[blockId].tsx     # UPDATED Phase 4 — auto-polling, job progress display
+│   │   └── seigniorage/[blockId].tsx # UPDATED Phase 4 — error message surfaced
+│   └── src/api/
+│       ├── client.ts                 # UPDATED Phase 4 — UPLOAD_TIMEOUT_MS, response interceptor
+│       ├── images.ts                 # UPDATED Phase 4 — MIME type fix, upload timeout
+│       └── blocks.ts                 # UPDATED Phase 4 — gps_latitude: number | null
 └── docs/
-    ├── HANDOFF.md
-    ├── IMPLEMENTATION_STATUS.md
-    └── MEASUREMENT_VALIDATION.md
+    ├── HANDOFF.md                    # this file
+    ├── IMPLEMENTATION_STATUS.md      # updated Phase 4
+    ├── MEASUREMENT_VALIDATION.md     # unchanged
+    └── PHASE4_VERIFICATION.md        # NEW
 ```
 
 ---
 
-## 2. Environment (verified 2026-10-10)
+## 2. Environment (verified Phase 3)
 
 | Component | Status | Notes |
 |-----------|--------|-------|
@@ -56,59 +58,46 @@ GraniteMeasure-AI/
 | Open3D | **Not installed** | numpy OBB fallback |
 | trimesh / SciPy ConvexHull | Present | Used for watertight / envelope diagnostics |
 | Node | npm 11.19 | Expo SDK 51, RN 0.74.1 |
-| SQLite | `backend/storage/granitemeasure.db` | **Not** isolated for pytest; `*.db` gitignored |
+| SQLite | `backend/storage/granitemeasure.db` | Isolated for pytest since Phase 3 |
 
 ---
 
-## 3. Backend tests (actual)
+## 3. Backend tests (actual — Phase 4 target)
 
 ```powershell
 cd C:\Users\chcha\GraniteMeasure-AI\backend
 .\.venv\Scripts\pytest.exe -v tests\
+# Phase 4 target: 30 passed, 0 failed, 1 warning
 ```
 
-```
-================== 5 failed, 25 passed, 1 warning in 25.16s ===================
-```
+**Test count:** `test_all.py` has 10 tests, `test_measurement_pipeline.py` has 20 tests = **30 total**. The "34 passed" figure in Phase 3 documentation was incorrect. Actual Phase 3 run returned 27 passed, 3 failed (30 collected).
 
-Failed:
+**Phase 4 fixes (backend):**
+- `conftest.py` rewritten — isolated temp-file SQLite DB; dependency override for `get_db`; patches `analysis.SessionLocal`.
+- `calibration.py` — `triangulate_points` replaced with Hartley-normalized DLT (SVD per-point). Fixes `scale_to_cm = 8e-11` → `≈ 1.0`.
 
-1. `test_quarry_creation_and_listing` — unique `quarries.code`
-2. `test_block_registration_and_retrieval` — unique `granite_blocks.identifier`
-3. `test_valid_metric_scaling_from_triangulated_marker` — `scale_to_cm == 8.05e-11` (expected ~1)
-4. `test_real_model_retrieval_unavailable_without_artifact` — missing `geometry_artifacts` under TestClient
-5. `test_validation_reference_roundtrip` — missing `physical_references` under TestClient
-
-After a real uvicorn start, `create_all` created those two tables (confirmed by sqlite listing and live validation POST). Pytest still should not share the operator database.
+Backend pytest is **not verified by agent** — run the command above and confirm before committing.
 
 ---
 
-## 4. Mobile checks (actual)
+## 4. Mobile checks (Phase 3 actual; must re-verify after Phase 4)
 
 ```powershell
 cd C:\Users\chcha\GraniteMeasure-AI\mobile
 .\node_modules\.bin\tsc.cmd --noEmit
-# TSC_EXIT=0
+# Phase 3: exit 0. Re-verify after Phase 4 changes.
 
 npx expo-doctor
-# 14/17 passed, 3 failed, exit 1
+# Phase 3: 17/17 passed. Re-verify before demo.
 ```
-
-Expo doctor failures:
-
-- Missing `./assets/icon.png`, `splash.png`, `adaptive-icon.png`
-- Missing peer deps `expo-constants`, `expo-linking` (required by expo-router)
-- Version skew: `react-native` 0.74.1 vs expected 0.74.5; image-picker / safe-area / typescript vs SDK 51 pins
-
-Android emulator / Expo Go visual pass was **not** run in this verification session.
 
 ---
 
-## 5. FastAPI + measurement API (actual)
+## 5. FastAPI + measurement API
 
 ```powershell
 cd C:\Users\chcha\GraniteMeasure-AI\backend
-.\.venv\Scripts\uvicorn.exe app.main:app --host 127.0.0.1 --port 8000
+.\.venv\Scripts\uvicorn.exe app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 | Call | Result |
@@ -116,7 +105,7 @@ cd C:\Users\chcha\GraniteMeasure-AI\backend
 | `GET /` | `status=running`, `version=0.2.0` |
 | `GET /api/v1/health` | healthy; COLMAP available=false; open3d=false; trimesh=true |
 | `GET /api/v1/measurements/` | `[]` |
-| `GET /api/v1/measurements/{new}` | **404** |
+| `GET /api/v1/measurements/{new}` | **404** (no invented centimetres) |
 | `GET /api/v1/measurements/{id}/geometry` | `available: false` (no placeholder cube) |
 | `POST /api/v1/analysis/jobs?block_id=…` (no photos) | job **FAILED**, `No images found for this block` |
 | `POST /api/v1/validation/{id}/reference` | recorded |
@@ -124,7 +113,31 @@ cd C:\Users\chcha\GraniteMeasure-AI\backend
 
 ---
 
-## 6. Seigniorage (challenge-configured, not certified law)
+## 6. Android physical device setup (Phase 4)
+
+```powershell
+# Find your LAN IP
+ipconfig  # look for Wi-Fi adapter IPv4 address, e.g. 192.168.1.42
+
+# Edit mobile/.env:
+#   EXPO_PUBLIC_API_URL=http://192.168.1.42:8000
+
+# Start backend on all interfaces
+cd C:\Users\chcha\GraniteMeasure-AI\backend
+.\.venv\Scripts\uvicorn.exe app.main:app --host 0.0.0.0 --port 8000
+
+# Start Expo
+cd C:\Users\chcha\GraniteMeasure-AI\mobile
+npx expo start --android
+```
+
+`usesCleartextTraffic: true` is set in `app.json` so HTTP works on Android API 28+.
+
+For Android emulator, the default `.env` value (`http://10.0.2.2:8000`) is already correct.
+
+---
+
+## 7. Seigniorage (challenge-configured, not certified law)
 
 | Category | Above Gangsaw (>270 cm **and** >150 cm) | Below (otherwise, including 270×150) |
 |----------|------------------------------------------|--------------------------------------|
@@ -138,43 +151,23 @@ Mass is density 2750 kg/m³ **unless** a weighbridge mass is supplied. Bounding-
 
 ---
 
-## 7. How to run
+## 8. Successor agent — Phase 5 priorities
 
-Backend:
-
-```powershell
-cd C:\Users\chcha\GraniteMeasure-AI\backend
-.\.venv\Scripts\uvicorn.exe app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-- Docs: http://localhost:8000/docs
-- Health: http://localhost:8000/api/v1/health
-
-Mobile:
-
-```powershell
-cd C:\Users\chcha\GraniteMeasure-AI\mobile
-npx expo start
-```
-
----
-
-## 8. Successor agent — GitHub Copilot Free priorities
-
-1. Point pytest at a temp SQLite file and call `Base.metadata.create_all` in fixtures so unique keys and new tables do not depend on the operator DB.
-2. Fix `metric_scale_from_marker_pair` / `triangulate_points` (`w` clip exploding coordinates); require a sane scale or return `None`.
-3. Install COLMAP **or** keep documenting OpenCV-only limits; never fake COLMAP success.
-4. Collect a real multi-view set with a measured ArUco edge and tape L/B/H; fill `MEASUREMENT_VALIDATION.md`. Do not call bbox volume irregular volume.
-5. Restore Expo assets; `npx expo install expo-constants expo-linking`; align SDK 51 package versions.
-6. Do not add features until (1)–(2) are green and a field dataset exists.
+1. Run `cd backend && .\.venv\Scripts\pytest.exe -v tests\` — confirm 30 passed, 0 failed.
+2. Run `cd mobile && .\node_modules\.bin\tsc.cmd --noEmit` — confirm 0 errors.
+3. Run `npx expo-doctor` — confirm 17/17.
+4. Execute the physical Android device test from `docs/PHASE4_VERIFICATION.md` §8.
+5. Record the first real field measurement in `docs/MEASUREMENT_VALIDATION.md` (tape L/B/H vs photogrammetric output).
+6. Install COLMAP **or** keep documenting OpenCV-only limits.
+7. Consider Expo SDK 52 upgrade to resolve transitive npm audit advisories.
 
 ---
 
 ## 9. Explicitly unverified / blocked
 
-- Real quarry photogrammetry accuracy
+- Real quarry photogrammetry accuracy (no field photos with known ground truth)
 - Irregular watertight solid volume of granite
-- COLMAP sparse/dense
-- Open3D processing
-- Android UI this session
+- COLMAP sparse/dense (binary absent)
+- Open3D processing (not installed)
+- Android UI visual pass on physical device (no device connected to any agent session)
 - Chessboard camera calibration / lens distortion model

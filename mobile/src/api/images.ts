@@ -1,4 +1,4 @@
-import { apiClient, BASE_HOST } from './client';
+import { apiClient, BASE_HOST, UPLOAD_TIMEOUT_MS } from './client';
 
 export interface QualityAnalysisResult {
   image_width: number;
@@ -72,14 +72,17 @@ export interface MeasurementData {
 export const analyzeSingleImage = async (uri: string): Promise<ImageAnalysisResponse> => {
   const formData = new FormData();
   const filename = uri.split('/').pop() || 'photo.jpg';
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
   formData.append('file', {
     uri,
     name: filename,
-    type: 'image/jpeg',
+    type: mimeType,
   } as any);
 
   const response = await apiClient.post<ImageAnalysisResponse>('/images/analyze', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: UPLOAD_TIMEOUT_MS,
   });
   return response.data;
 };
@@ -92,15 +95,22 @@ export const createCaptureSession = async (blockId: number | string, officerName
 export const uploadSessionImage = async (sessionId: number, uri: string, sequenceNumber = 0) => {
   const formData = new FormData();
   const filename = uri.split('/').pop() || `img_${sequenceNumber}.jpg`;
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
   formData.append('file', {
     uri,
     name: filename,
-    type: 'image/jpeg',
+    type: mimeType,
   } as any);
 
-  const response = await apiClient.post(`/capture/sessions/${sessionId}/images?sequence_number=${sequenceNumber}`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  const response = await apiClient.post(
+    `/capture/sessions/${sessionId}/images?sequence_number=${sequenceNumber}`,
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: UPLOAD_TIMEOUT_MS,
+    }
+  );
   return response.data;
 };
 

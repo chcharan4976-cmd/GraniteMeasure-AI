@@ -153,16 +153,78 @@ def solve_pnp_marker(
     }
 
 
+def _hartley_normalize(pts: np.ndarray):
+    """Hartley normalization for 2D points: translate to centroid, scale so
+    mean distance from centroid is sqrt(2).  Returns (T, pts_norm) where T is
+    the 3×3 similarity transform such that pts_norm = (T @ homogeneous(pts).T).T
+    """
+    pts = np.asarray(pts, dtype=np.float64).reshape(-1, 2)
+    centroid = pts.mean(axis=0)
+    shifted = pts - centroid
+    mean_dist = np.mean(np.linalg.norm(shifted, axis=1))
+    if mean_dist < 1e-12:
+        # Degenerate (all points identical) — return identity
+        T = np.eye(3, dtype=np.float64)
+        return T, pts
+    scale = np.sqrt(2.0) / mean_dist
+    T = np.array([
+        [scale, 0.0, -scale * centroid[0]],
+        [0.0, scale, -scale * centroid[1]],
+        [0.0, 0.0,  1.0],
+    ], dtype=np.float64)
+    pts_h = np.column_stack([pts, np.ones(len(pts))])
+    pts_norm = (T @ pts_h.T).T[:, :2]
+    return T, pts_norm
+
+
 def triangulate_points(
     pts1: np.ndarray,
     pts2: np.ndarray,
     P1: np.ndarray,
     P2: np.ndarray,
 ) -> np.ndarray:
+    """Triangulate N 3D points from two sets of 2D correspondences.
+
+    Uses normalized DLT (Hartley & Zisserman, §12.2) for numerical stability.
+    Raw pixel coordinates are large (e.g. 400–4300) which makes the standard
+    DLT ill-conditioned; normalization brings them near the origin with unit
+    scale before SVD.
+
+    Returns (N, 3) float64 array of Euclidean 3D coordinates.
+    Points with |W| < 1e-9 (degenerate / behind-camera) are set to NaN.
+    """
     pts1 = np.asarray(pts1, dtype=np.float64).reshape(-1, 2)
     pts2 = np.asarray(pts2, dtype=np.float64).reshape(-1, 2)
-    homog = cv2.triangulatePoints(P1, P2, pts1.T, pts2.T)
-    xyz = (homog[:3] / np.clip(homog[3], 1e-12, None)).T
+    P1 = np.asarray(P1, dtype=np.float64)
+    P2 = np.asarray(P2, dtype=np.float64)
+
+    T1, pts1n = _hartley_normalize(pts1)
+    T2, pts2n = _hartley_normalize(pts2)
+
+    # Apply normalization transforms to the projection matrices
+    P1n = T1 @ P1
+    P2n = T2 @ P2
+
+    n = pts1n.shape[0]
+    xyz = np.full((n, 3), np.nan, dtype=np.float64)
+
+    for i in range(n):
+        x1, y1 = pts1n[i]
+        x2, y2 = pts2n[i]
+        # Build 4×4 linear system A X = 0 (each point gives 2 equations)
+        A = np.array([
+            x1 * P1n[2] - P1n[0],
+            y1 * P1n[2] - P1n[1],
+            x2 * P2n[2] - P2n[0],
+            y2 * P2n[2] - P2n[1],
+        ], dtype=np.float64)
+        _, _, Vt = np.linalg.svd(A)
+        X = Vt[-1]  # smallest singular value = homogeneous solution
+        w = X[3]
+        if abs(w) < 1e-9:
+            continue  # degenerate — leave as NaN
+        xyz[i] = X[:3] / w
+
     return xyz
 
 
@@ -175,7 +237,10 @@ def metric_scale_from_marker_pair(
 ) -> Optional[dict]:
     """Recover a 3D scale factor so reconstructed marker edges match the known size."""
     xyz = triangulate_points(corners1_px, corners2_px, P1, P2)
-    if xyz.shape[0] != 4 or not np.all(np.isfinite(xyz)):
+    if xyz.shape[0] != 4:
+        return None
+    # Reject if any point is degenerate (NaN from near-zero W)
+    if not np.all(np.isfinite(xyz)):
         return None
     edges = np.array(
         [np.linalg.norm(xyz[(i + 1) % 4] - xyz[i]) for i in range(4)],

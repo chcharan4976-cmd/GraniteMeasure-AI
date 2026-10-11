@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, RefreshControl } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,9 +11,12 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { spacing } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
 import { useTranslation } from '../../src/i18n/useTranslation';
-import { getBlockMeasurement, MeasurementData } from '../../src/api/images';
+import { getBlockMeasurement, MeasurementData, listAnalysisJobs, AnalysisJobStatus } from '../../src/api/images';
 import { getBlock, GraniteBlockItem } from '../../src/api/blocks';
-import { AlertTriangle, CheckCircle, Shield, FileText, ArrowRight, Layers } from 'lucide-react-native';
+import { AlertTriangle } from 'lucide-react-native';
+
+const POLL_INTERVAL_MS = 3000;  // 3 s between polls
+const POLL_MAX_ATTEMPTS = 80;   // 4 min — backend JOB_TIMEOUT_SEC is 180 s; give a 60 s margin
 
 export default function ResultsScreen() {
   const { blockId } = useLocalSearchParams();
@@ -23,10 +26,23 @@ export default function ResultsScreen() {
 
   const [measurement, setMeasurement] = useState<MeasurementData | null>(null);
   const [block, setBlock] = useState<GraniteBlockItem | null>(null);
+  const [jobStatus, setJobStatus] = useState<AnalysisJobStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [polling, setPolling] = useState(false);
 
+  const pollAttemptsRef = useRef(0);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearPoll = () => {
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  };
+
+  // Fetch current measurement and the latest job status
   const fetchResults = async () => {
     try {
       setErrorMsg(null);
@@ -36,18 +52,83 @@ export default function ResultsScreen() {
       ]);
       setMeasurement(measData);
       setBlock(blockData);
+
+      // Also check latest job status for progress display
+      try {
+        const jobs = await listAnalysisJobs(blockId as string);
+        if (jobs && jobs.length > 0) {
+          setJobStatus(jobs[jobs.length - 1]);
+        }
+      } catch {
+        // job status is supplemental — don't fail the whole screen
+      }
     } catch (err: any) {
       console.warn('Error fetching results:', err);
-      setErrorMsg('Failed to load measurement data.');
+      setErrorMsg(
+        err?.response?.status === 404
+          ? 'No measurement exists for this block yet.'
+          : 'Failed to load measurement data. Check your connection.'
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
+  // Returns true when we know the job is done (either terminal job status OR measurement result)
+  const isTerminal = (meas: MeasurementData | null, job: AnalysisJobStatus | null): boolean => {
+    if (meas && (meas.status === 'MEASURED' || meas.status === 'ESTIMATED' || meas.status === 'FAILED')) return true;
+    if (job && (job.status === 'COMPLETED' || job.status === 'FAILED')) return true;
+    return false;
+  };
+
+  // Auto-poll while the job is still running
+  const schedulePoll = () => {
+    clearPoll();
+    if (pollAttemptsRef.current >= POLL_MAX_ATTEMPTS) {
+      setPolling(false);
+      return;
+    }
+    pollTimerRef.current = setTimeout(async () => {
+      pollAttemptsRef.current += 1;
+      await fetchResults();
+      // Use functional updates to read current state without stale closure
+      setJobStatus((currentJob) => {
+        setMeasurement((currentMeas) => {
+          if (isTerminal(currentMeas, currentJob)) {
+            setPolling(false);
+          } else {
+            schedulePoll();
+          }
+          return currentMeas;
+        });
+        return currentJob;
+      });
+    }, POLL_INTERVAL_MS);
+  };
+
   useEffect(() => {
-    fetchResults();
+    (async () => {
+      await fetchResults();
+      // Start polling — stop once job reaches terminal state
+      setJobStatus((currentJob) => {
+        setMeasurement((currentMeas) => {
+          if (!isTerminal(currentMeas, currentJob)) {
+            setPolling(true);
+            pollAttemptsRef.current = 0;
+            schedulePoll();
+          }
+          return currentMeas;
+        });
+        return currentJob;
+      });
+    })();
+    return () => clearPoll();
   }, [blockId]);
+
+  // Progress label shown while polling; also indicate if timed out
+  const pollTimedOut = !polling && pollAttemptsRef.current >= POLL_MAX_ATTEMPTS;
+  const progressStep = jobStatus?.current_step || (polling ? 'Processing…' : null);
 
   if (loading) {
     return (
@@ -196,16 +277,31 @@ export default function ResultsScreen() {
         ) : (
           <View style={{ marginTop: spacing.lg }}>
             <Card style={{ alignItems: 'center', padding: spacing.xl }}>
-              <AlertTriangle color={colors.warning} size={40} />
+              {polling ? (
+                <ActivityIndicator color={colors.primary} size="large" />
+              ) : (
+                <AlertTriangle color={colors.warning} size={40} />
+              )}
               <Text style={[typography.cardTitle, { color: colors.text, marginTop: spacing.md }]}>
-                Measurement In Progress or Pending
+                {polling ? 'Reconstructing…' : 'Measurement Pending'}
               </Text>
+              {progressStep ? (
+                <Text style={[typography.body, { color: colors.primary, marginTop: spacing.xs }]}>
+                  {progressStep}
+                </Text>
+              ) : null}
               <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginTop: spacing.xs }]}>
-                {errorMsg || 'Images have been captured. Tap refresh to check if reconstruction has completed.'}
+                {errorMsg || (polling
+                  ? 'Photogrammetric reconstruction is running. This screen updates automatically.'
+                  : pollTimedOut
+                  ? 'Reconstruction is taking longer than expected. Tap refresh to check manually.'
+                  : 'Images have been captured. Tap refresh to check if reconstruction has completed.')}
               </Text>
-              <View style={{ marginTop: spacing.lg, width: '100%' }}>
-                <Button title="Refresh Analysis" onPress={fetchResults} variant="outline" />
-              </View>
+              {!polling && (
+                <View style={{ marginTop: spacing.lg, width: '100%' }}>
+                  <Button title="Refresh Analysis" onPress={() => { setRefreshing(true); fetchResults(); }} variant="outline" />
+                </View>
+              )}
             </Card>
           </View>
         )}

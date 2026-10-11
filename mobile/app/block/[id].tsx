@@ -10,7 +10,7 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { spacing } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
 import { getBlock, GraniteBlockItem } from '../../src/api/blocks';
-import { Camera, FileText, CheckCircle, MapPin, Box } from 'lucide-react-native';
+import { MapPin } from 'lucide-react-native';
 
 export default function BlockDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -19,13 +19,22 @@ export default function BlockDetailScreen() {
 
   const [block, setBlock] = useState<GraniteBlockItem | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         const data = await getBlock(id as string);
         setBlock(data);
-      } catch (err) {
+      } catch (err: any) {
+        const status = err?.response?.status;
+        if (status === 404) {
+          setLoadError('Block not found on server.');
+        } else if (!err.response) {
+          setLoadError('Could not reach the backend. Check your network connection.');
+        } else {
+          setLoadError(`Server error (${status}). Please try again.`);
+        }
         console.warn('Could not load block:', err);
       } finally {
         setLoading(false);
@@ -46,7 +55,9 @@ export default function BlockDetailScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Header title="Block Details" />
         <View style={styles.content}>
-          <Text style={[typography.body, { color: colors.textSecondary }]}>Block not found.</Text>
+          <Text style={[typography.body, { color: colors.textSecondary }]}>
+            {loadError || 'Block not found.'}
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -84,7 +95,7 @@ export default function BlockDetailScreen() {
             <View style={[styles.gpsRow, { marginTop: spacing.md }]}>
               <MapPin color={colors.textSecondary} size={16} />
               <Text style={[typography.caption, { color: colors.textSecondary, marginLeft: spacing.xs }]}>
-                GPS: {block.gps_latitude.toFixed(4)}°N, {block.gps_longitude?.toFixed(4)}°E (Quarry Verified)
+                GPS: {block.gps_latitude.toFixed(4)}°N, {block.gps_longitude?.toFixed(4)}°E (Device GPS)
               </Text>
             </View>
           )}

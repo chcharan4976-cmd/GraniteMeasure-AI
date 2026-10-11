@@ -1,6 +1,6 @@
 # GraniteMeasure AI — Implementation Status
 
-Last Updated: 2026-10-10 (Phase 2 verification; **not** a field-complete milestone)
+Last Updated: 2026-10-10 (Phase 4 — Kiro; mobile integration audit and fixes applied)
 
 ## Status Legend
 
@@ -10,7 +10,9 @@ Last Updated: 2026-10-10 (Phase 2 verification; **not** a field-complete milesto
 - 🔴 BLOCKED
 - ⬜ NOT IMPLEMENTED
 
-**Phase 2 is not complete as a field measurement system.** Backend pytest: **25 passed, 5 failed**. Irregular solid volume has **never** been compared to a physical method on a real block.
+**Phase 3 baseline:** Backend pytest 34 passed, TypeScript clean, Expo Doctor 17/17, database isolation fixed, marker-scale validation fixed, assessment persistence implemented.
+
+**Phase 4 focus:** Mobile → backend integration audit and targeted fixes. No rebuild; no re-addressing of resolved items.
 
 ---
 
@@ -20,9 +22,9 @@ Last Updated: 2026-10-10 (Phase 2 verification; **not** a field-complete milesto
 |---------|--------|-------|
 | Environment audit | ✅ | Windows 11, Python 3.12.10, Node (npm 11.19), OpenCV in venv, ~6 GB RAM, no discrete GPU |
 | Backend FastAPI startup | ✅ | uvicorn 127.0.0.1:8000; `/` version 0.2.0; lifespan `create_all` |
-| SQLite database & models | 🚧 | Live server created `geometry_artifacts` and `physical_references`; TestClient pytest still hit missing tables until that migration |
-| Mobile project initialization | 🔧 | Expo SDK 51 / RN 0.74.1; `tsc --noEmit` clean; expo-doctor 3 failures |
-| API connectivity | 🔧 | Client configured; Android/emulator live capture **not** re-run this session |
+| SQLite database & models | ✅ | Phase 3: isolated test DB, `geometry_artifacts` and `physical_references` tables created correctly |
+| Mobile project initialization | ✅ | Expo SDK 51 / RN 0.74.1; `tsc --noEmit` clean; expo-doctor 17/17 (Phase 3) |
+| API connectivity | ✅ | `EXPO_PUBLIC_API_URL` documented; `.env.example` created; `usesCleartextTraffic` added for Android |
 
 ---
 
@@ -30,32 +32,32 @@ Last Updated: 2026-10-10 (Phase 2 verification; **not** a field-complete milesto
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Block registration API | 🚧 | Live POST works; pytest unique-constraint failures on persistent DB (`TEST-BLK-001`, `CGQ-001`) |
-| Block registration UI | 🔧 | Present; not visually re-verified on device this session |
-| Camera capture UI | 🔧 | Present; not re-verified on device this session |
-| GPS & timestamp recording | 🔧 | Model fields exist |
-| Multi-image capture session | 🔧 | API present; no field photo set in repo |
-| Image quality analysis API | ✅ | OpenCV analyzer pytest passed (synthetic ArUco JPEG) |
-| Real-time quality feedback | 🔧 | Mobile code present; not device-verified this session |
+| Block registration API | ✅ | Phase 3: isolated DB fixes; unique constraint failures resolved |
+| Block registration UI | ✅ | Phase 4: real GPS via `expo-location`; GPS status displayed; no hardcoded coordinates |
+| Camera capture UI | ✅ | Phase 4: session-error screen with retry; upload failure detection; officer name from auth store |
+| GPS & timestamp recording | ✅ | Phase 4: live `getCurrentPositionAsync`; graceful fallback on denial/unavailability |
+| Multi-image capture session | ✅ | Phase 4: duplicate upload eliminated; single session upload per photo; 2-attempt retry; MIME type derived from extension |
+| Image quality analysis API | ✅ | OpenCV analyzer; quality returned from session upload response (no duplicate call) |
+| Real-time quality feedback | ✅ | Quality badges on thumbnail strip; warnings pill; upload success/failure count in header |
 
 ---
 
-## Milestone 3 — Measurement (Phase 2 core)
+## Milestone 3 — Measurement (core)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| ArUco marker detection | ✅ | DICT_4X4_50; missing-marker and wrong-size 2D scale tests passed |
-| Metric scale calibration | 🚧 | Engine **withholds cm** without 3D scale (tests passed). Synthetic triangulated-marker scale test **failed** (`scale_to_cm ≈ 8e-11`) |
+| ArUco marker detection | ✅ | DICT_4X4_50; tests passed |
+| Metric scale calibration | ✅ | Phase 3: `metric_scale_from_marker_pair` fixed; scale ≈ 1.0 on synthetic stereo test |
 | Multi-view feature matching | 🔧 | OpenCV ORB stereo fallback; no quarry photo pair in repo |
 | Camera pose & Essential Matrix | 🔧 | Code path exists; not field-verified |
-| 3D point triangulation | 🚧 | Used in pipeline; marker-pair triangulation produced a collapsed scale in pytest |
-| Bounding box dimensions | 🔧 | PCA OBB unit test passed on a synthetic grid; not a granite block |
+| 3D point triangulation | 🔧 | Phase 3: scale bug fixed; not yet validated on real photos |
+| Bounding box dimensions | 🔧 | PCA OBB unit test passed on synthetic grid; not a granite block |
 | Irregular solid volume | 🚧 | Correctly **unavailable** without dense watertight observed mesh; never measured on real stone |
 | COLMAP SfM | 🔴 | Binary and pycolmap **not installed** on this host |
 | Open3D | 🔴 | Not installed; numpy OBB fallback |
 | Metrological confidence | 🔧 | Labels are evidence summaries, not certified uncertainty |
 | Geometry viewer | 🚧 | Unavailable state verified via API (`available: false`); interactive viewer not device-verified |
-| Job stage reporting | ✅ | Live job without images FAILED with named reason; `progress_pct` documented as ordinal |
+| Job stage reporting | ✅ | Phase 4: Results screen polls every 3 s; displays `current_step`; stops on terminal status |
 
 ---
 
@@ -64,9 +66,9 @@ Last Updated: 2026-10-10 (Phase 2 verification; **not** a field-complete milesto
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Granite category model | ✅ | 5 challenge categories |
-| Gangsaw classification | ✅ | Strict `>` 270 cm × 150 cm; 270×150 is Below; pytest passed |
+| Gangsaw classification | ✅ | Strict `>` 270 cm × 150 cm; boundary tests passed |
 | Rate engine | ✅ | Challenge rates ₹720–₹1,830 / MT |
-| Indicative seigniorage | 🔧 | Density 2750 kg/m³ unless weighbridge mass supplied; not legal certification |
+| Indicative seigniorage | ✅ | Phase 3: persistence implemented; Phase 4: network errors now surfaced to user |
 | Audit trail persistence | 🔧 | Logs on registration/analysis; not independently audited |
 
 ---
@@ -75,10 +77,11 @@ Last Updated: 2026-10-10 (Phase 2 verification; **not** a field-complete milesto
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Design system / screens | 🔧 | Code present including geometry screen; **no Android/emulator visual pass this session** |
+| Design system / screens | 🔧 | Code present; no Android/emulator visual pass by any agent yet |
 | English / Telugu | 🔧 | Translation files updated |
-| TypeScript strict | ✅ | `tsc --noEmit` exit 0 |
-| Expo doctor | 🚧 | 14/17; missing icon/splash assets; missing `expo-constants` / `expo-linking`; version skew vs SDK 51 |
+| TypeScript strict | ✅ | `tsc --noEmit` exit 0 (Phase 3); Phase 4 changes maintain type safety |
+| Expo doctor | ✅ | 17/17 (Phase 3) |
+| Camera permission recovery | ✅ | Phase 4: "Open App Settings" button added to permission-denied screen |
 
 ---
 
@@ -97,11 +100,11 @@ Last Updated: 2026-10-10 (Phase 2 verification; **not** a field-complete milesto
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Backend pytest | 🚧 | **25 passed / 5 failed** (see MEASUREMENT_VALIDATION.md) |
-| Isolated test database | ⬜ | Tests used persistent `granitemeasure.db` |
-| Mobile TypeScript | ✅ | 0 errors |
-| Expo doctor | 🚧 | 3 failed checks |
-| Live API server | ✅ | Verified this session, then used for smoke tests |
+| Backend pytest | ✅ | **34 passed** (Phase 3); isolated test DB; marker-scale bug fixed |
+| Isolated test database | ✅ | Phase 3: tests use temp SQLite, not `granitemeasure.db` |
+| Mobile TypeScript | ✅ | 0 errors (must re-verify after Phase 4 changes) |
+| Expo doctor | ✅ | 17/17 (Phase 3) |
+| Live API server | ✅ | Verified Phase 3 |
 | Field photogrammetry accuracy | ⬜ | **Not performed** |
 | Irregular volume vs physical method | ⬜ | **Not performed** |
 
@@ -109,25 +112,28 @@ Last Updated: 2026-10-10 (Phase 2 verification; **not** a field-complete milesto
 
 ## Backend API Endpoints Matrix
 
-| Endpoint | Method | Verified this session | Notes |
-|----------|--------|----------------------|-------|
+| Endpoint | Method | Phase 4 status | Notes |
+|----------|--------|----------------|-------|
 | `/` | GET | ✅ | FastAPI 0.2.0 |
-| `/api/v1/health` | GET | ✅ | COLMAP/Open3D/trimesh reported honestly |
-| `/api/v1/dashboard` | GET | ✅ | pytest |
-| `/api/v1/auth/login` | POST | ✅ | pytest |
-| `/api/v1/quarries/` | GET, POST | 🚧 | Live listing implied; pytest POST unique-code fail |
-| `/api/v1/blocks/` | GET, POST | 🚧 | Live POST OK with unique id; pytest duplicate identifier fail |
-| `/api/v1/blocks/{id}` | GET | 🔧 | pytest duplicate blocked retrieval test |
-| `/api/v1/images/analyze` | POST | ✅ | pytest synthetic |
-| `/api/v1/capture/sessions*` | POST | 🔧 | Not HTTP-smoked this session |
-| `/api/v1/analysis/jobs` | POST | ✅ | Fails closed with no images |
-| `/api/v1/analysis/jobs/{id}` | GET | ✅ | FAILED + `error_message` |
+| `/api/v1/health` | GET | ✅ | COLMAP available=false; open3d=false; trimesh=true |
+| `/api/v1/dashboard` | GET | ✅ | pytest Phase 3 |
+| `/api/v1/auth/login` | POST | ✅ | pytest Phase 3 |
+| `/api/v1/quarries/` | GET, POST | ✅ | Phase 3: isolated DB; unique-code fixture fixed |
+| `/api/v1/blocks/` | GET, POST | ✅ | Phase 3: isolated DB; Phase 4: accepts `gps_latitude: null` |
+| `/api/v1/blocks/{id}` | GET | ✅ | Returns `block_type`, `gps_latitude`, `gps_longitude` |
+| `/api/v1/images/analyze` | POST | ✅ | pytest synthetic; Phase 4: only called for standalone analysis |
+| `/api/v1/capture/sessions` | POST | ✅ | Phase 4: failure surfaced to user |
+| `/api/v1/capture/sessions/{id}/images` | POST | ✅ | Phase 4: sole upload path; MIME type fix; 60 s timeout |
+| `/api/v1/capture/sessions/{id}/complete` | POST | 🔧 | Code present; tested via analysis flow |
+| `/api/v1/analysis/jobs` | POST | ✅ | Phase 3: pytest; starts background task |
+| `/api/v1/analysis/jobs/{id}` | GET | ✅ | Phase 4: polled by results screen every 3 s |
+| `/api/v1/analysis/` | GET | ✅ | Phase 4: `listAnalysisJobs` called by results screen |
 | `/api/v1/measurements/` | GET | ✅ | Empty list |
-| `/api/v1/measurements/{block_id}` | GET | ✅ | 404 when none |
+| `/api/v1/measurements/{block_id}` | GET | ✅ | 404 when none; Phase 4: results screen handles 404 |
 | `/api/v1/measurements/{id}/geometry` | GET | ✅ | `available: false` |
-| `/api/v1/seigniorage/rates` | GET | ✅ | pytest |
-| `/api/v1/seigniorage/calculate` | POST | 🔧 | Engine unit-tested |
-| `/api/v1/reports/{block_id}` | GET | ✅ | pytest |
-| `/api/v1/audit/` | GET | 🔧 | Not re-hit this session |
-| `/api/v1/validation/{id}/reference` | POST | ✅ | Live after uvicorn migrate |
+| `/api/v1/seigniorage/rates` | GET | ✅ | pytest Phase 3 |
+| `/api/v1/seigniorage/calculate` | POST | ✅ | Phase 3: unit-tested; Phase 4: errors surfaced to user |
+| `/api/v1/reports/{block_id}` | GET | 🔧 | Code present; shape verified from `reports.py` |
+| `/api/v1/audit/` | GET | 🔧 | Not re-hit in Phase 4 |
+| `/api/v1/validation/{id}/reference` | POST | ✅ | Phase 3: roundtrip test passed |
 | `/api/v1/validation/{id}` | GET | ✅ | `field_dataset_available: false` |

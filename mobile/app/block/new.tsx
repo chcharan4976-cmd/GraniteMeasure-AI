@@ -2,15 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Location from 'expo-location';
 import { Header } from '../../src/components/Header';
 import { Button } from '../../src/components/Button';
-import { Card } from '../../src/components/Card';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { typography } from '../../src/theme/typography';
 import { spacing } from '../../src/theme/spacing';
 import { getQuarries, QuarryItem } from '../../src/api/quarries';
 import { createBlock } from '../../src/api/blocks';
-import { MapPin, Sparkles } from 'lucide-react-native';
+import { MapPin } from 'lucide-react-native';
 
 const GRANITE_CATEGORIES = [
   'Black Galaxy',
@@ -33,6 +33,10 @@ export default function NewBlockScreen() {
   const [loading, setLoading] = useState(false);
   const [fetchingQuarries, setFetchingQuarries] = useState(true);
 
+  // GPS state — null means not yet acquired
+  const [gpsCoords, setGpsCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<'idle' | 'fetching' | 'ok' | 'denied' | 'unavailable'>('idle');
+
   useEffect(() => {
     (async () => {
       try {
@@ -47,11 +51,45 @@ export default function NewBlockScreen() {
         setFetchingQuarries(false);
       }
     })();
+
+    // Request GPS on screen mount so it's ready by the time the officer taps submit
+    acquireGps();
   }, []);
+
+  const acquireGps = async () => {
+    setGpsStatus('fetching');
+    try {
+      const existing = await Location.getForegroundPermissionsAsync();
+      let status = existing.status;
+      if (status !== 'granted') {
+        const req = await Location.requestForegroundPermissionsAsync();
+        status = req.status;
+      }
+      if (status !== 'granted') {
+        setGpsStatus('denied');
+        return;
+      }
+      // Use lastKnownPosition first for speed; fall back to a fresh fix
+      let pos = await Location.getLastKnownPositionAsync({ maxAge: 60_000 });
+      if (!pos) {
+        pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      }
+      setGpsCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+      setGpsStatus('ok');
+    } catch {
+      setGpsStatus('unavailable');
+    }
+  };
 
   const handleCreateBlock = async () => {
     if (!selectedQuarryId) {
       Alert.alert('Required', 'Please select an authorized quarry.');
+      return;
+    }
+
+    // If GPS is still fetching, wait briefly; if denied/unavailable, warn but allow
+    if (gpsStatus === 'fetching') {
+      Alert.alert('Locating…', 'GPS fix in progress. Please wait a moment and try again.');
       return;
     }
 
@@ -62,8 +100,8 @@ export default function NewBlockScreen() {
         color_group: colorGroup,
         identifier: identifier.trim() || undefined,
         block_type: blockType,
-        gps_latitude: 15.78, // AP mining coordinates (Chimakurthy belt)
-        gps_longitude: 79.58,
+        gps_latitude: gpsCoords?.lat ?? null,
+        gps_longitude: gpsCoords?.lon ?? null,
         observations: observations.trim() || undefined,
       });
 
@@ -175,6 +213,31 @@ export default function NewBlockScreen() {
           ))}
         </View>
 
+        {/* GPS Status */}
+        <View style={[styles.gpsRow, { marginTop: spacing.md, marginBottom: spacing.xs }]}>
+          <MapPin color={
+            gpsStatus === 'ok' ? colors.success :
+            gpsStatus === 'fetching' ? colors.primary :
+            colors.warning
+          } size={16} />
+          <Text style={[typography.caption, { color: colors.textSecondary, marginLeft: spacing.xs, flex: 1 }]}>
+            {gpsStatus === 'ok' && gpsCoords
+              ? `GPS: ${gpsCoords.lat.toFixed(5)}°N, ${gpsCoords.lon.toFixed(5)}°E`
+              : gpsStatus === 'fetching'
+              ? 'Acquiring GPS position…'
+              : gpsStatus === 'denied'
+              ? 'Location permission denied — no GPS will be recorded'
+              : gpsStatus === 'unavailable'
+              ? 'GPS unavailable — no location will be recorded'
+              : 'Tap to acquire GPS'}
+          </Text>
+          {(gpsStatus === 'denied' || gpsStatus === 'unavailable' || gpsStatus === 'idle') && (
+            <TouchableOpacity onPress={acquireGps}>
+              <Text style={[typography.caption, { color: colors.primary }]}>Retry</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
         {/* Custom Identifier */}
         <Text style={[typography.cardTitle, { color: colors.text, marginTop: spacing.lg, marginBottom: spacing.xs }]}>
           Block Identifier (Optional)
@@ -237,4 +300,5 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     fontSize: 14,
   },
+  gpsRow: { flexDirection: 'row', alignItems: 'center' },
 });

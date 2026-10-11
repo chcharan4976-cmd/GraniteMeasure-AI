@@ -24,6 +24,7 @@ export default function SeigniorageScreen() {
   const [assessment, setAssessment] = useState<SeigniorageResult | null>(null);
   const [block, setBlock] = useState<GraniteBlockItem | null>(null);
   const [loading, setLoading] = useState(true);
+  const [seigniorageError, setSeigniorageError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -61,8 +62,10 @@ export default function SeigniorageScreen() {
         });
 
         setAssessment(calc);
-      } catch (err) {
+      } catch (err: any) {
+        const msg = err?.response?.data?.detail || err?.message || 'Unknown error';
         console.warn('Could not calculate seigniorage assessment:', err);
+        setSeigniorageError(`Could not load seigniorage data: ${msg}`);
       } finally {
         setLoading(false);
       }
@@ -86,7 +89,9 @@ export default function SeigniorageScreen() {
         <Header title={t('seigniorage')} />
         <View style={styles.content}>
           <Text style={[typography.body, { color: colors.textSecondary }]}>
-            Indicative seigniorage is withheld until a CALIBRATED measurement with centimetre dimensions exists. Placeholder dimensions are not used.
+            {seigniorageError
+              ? seigniorageError
+              : 'Indicative seigniorage is withheld until a CALIBRATED measurement with centimetre dimensions exists. Placeholder dimensions are not used.'}
           </Text>
         </View>
       </SafeAreaView>
