@@ -19,7 +19,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0B1116"
       },
-      "package": "com.granitemeasure.ai",},
+      "package": "com.granitemeasure.ai"
+    },
     "web": {
       "favicon": "./assets/favicon.png"
     },
@@ -36,9 +37,10 @@
         {
           "locationWhenInUsePermission": "Allow GraniteMeasure AI to record your GPS coordinates when registering a granite block."
         }
-      ]
+      ],
+      "expo-font",
+      "expo-secure-store"
     ],
     "scheme": "granitemeasure"
   }
 }
-
